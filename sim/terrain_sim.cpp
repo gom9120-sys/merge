@@ -6,7 +6,7 @@
 #include <string.h>
 unsigned long g_millis = 0;
 #include "Wire.h"
-SerialClass Serial; WireClass Wire;
+SerialClass Serial; WireClass Wire; bool g_serialEcho = false;
 #include "../merge.ino"
 
 // ---------- 난수 (재현 가능하게 고정 시드) ----------

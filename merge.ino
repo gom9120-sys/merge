@@ -138,7 +138,9 @@
 //   H,<risk>,<hazard>,<sensor>,<dist_mm>,<width_mm>,<depth_mm>
 //     sensor   위험을 만든 센서 0=좌 1=중 2=우, 255=없음(위험 해제)
 //     dist_mm  그 순간 그 센서의 측정 거리
-//     width_mm 누적된 홈의 너비, depth_mm 누적된 홈의 깊이
+//     width_mm 판정 당시 누적된 홈의 너비 (턱이면 0)
+//     depth_mm 판정 당시 홈의 깊이. hazard가 STEP / EXIT_STEP이면
+//              홈 깊이가 아니라 노면이 올라온 높이(턱 높이)다.
 //
 // 이벤트/오류는 별도 줄로 나간다:  E,<사유>
 //   E,BOOT / E,CAL,<남은초> / E,IMU_READY / E,IMU_FAIL / E,IMU_LOST / E,READY
@@ -439,6 +441,11 @@ struct DangerDetector {
   RiskLevel risk;          // 마지막 판정 (RISK_HOLD_MS 동안 유지)
   HazardCause hazard;
   unsigned long riskAtMs;
+  // 판정이 난 그 프레임의 홈 너비/깊이. STAIR나 EXIT_STEP은 판정과 동시에
+  // 홈 상태를 지우기 때문에, 앱으로 보낼 값은 지우기 전에 따로 잡아 둔다.
+  // hazard가 STEP / EXIT_STEP이면 riskDepthM은 홈 깊이가 아니라 턱 높이다.
+  float riskWidthM;
+  float riskDepthM;
 };
 
 // ===================== IMU 값 =====================
@@ -965,6 +972,8 @@ void resetDetector(uint8_t index) {
   d.risk = RISK_SAFE;
   d.hazard = HAZARD_NONE;
   d.riskAtMs = d.lastSampleAtMs;
+  d.riskWidthM = 0.0;
+  d.riskDepthM = 0.0;
 }
 
 // 빗변 거리(mm) -> 센서 아래 노면까지의 수직 낙차(m).
@@ -1021,6 +1030,8 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
   float speed = currentSpeedMps();
   RiskLevel risk = RISK_SAFE;
   HazardCause hazard = HAZARD_NONE;
+  float eventWidthM = 0.0;   // 이번 프레임 판정에 쓰인 홈 너비
+  float eventDepthM = 0.0;   // 홈 깊이, 턱이면 턱 높이
 
   if (!d.inHole) {
     // ---------- 홈이 감지되지 않은 상태 ----------
@@ -1032,6 +1043,7 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
       // 2. 턱 (노면이 갑자기 가까워짐)
       risk = RISK_DANGER;
       hazard = HAZARD_STEP;
+      eventDepthM = -delta;  // 턱 높이
     } else if (delta > SUDDEN_CHANGE_THRESHOLD_M) {
       // 3. 홈 (노면이 갑자기 멀어짐) - 여기서부터 너비를 적분한다.
       risk = RISK_SAFE;
@@ -1039,6 +1051,8 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
       d.inHole = true;
       d.holeDepthM = delta;
       d.holeWidthM = speed * interval * HOLE_ENTRY_WIDTH_RATIO;
+      eventWidthM = d.holeWidthM;
+      eventDepthM = d.holeDepthM;
     } else {
       // 임계값 사이
       risk = RISK_SAFE;
@@ -1049,6 +1063,9 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
     risk = RISK_SAFE;
     hazard = HAZARD_NONE;
     d.holeWidthM += speed * interval;
+    // 상태를 지우는 분기가 있으므로 판정에 쓰인 값을 먼저 남겨 둔다.
+    eventWidthM = d.holeWidthM;
+    eventDepthM = d.holeDepthM;
 
     // 노면이 원래 높이 근처(또는 그 위)로 돌아왔는가.
     bool recovered = false;
@@ -1062,6 +1079,7 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
         // 원래 높이보다 더 높아짐 = 턱
         risk = RISK_DANGER;
         hazard = HAZARD_EXIT_STEP;
+        eventDepthM = -delta - d.holeDepthM;  // 원래 높이 위로 올라온 만큼
       } else if (d.holeWidthM >= HOLE_SAFE_GAP_M) {
         risk = RISK_DANGER;
         hazard = HAZARD_STAIR;
@@ -1088,6 +1106,7 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
         // 홈에서 원래 높이보다 더 높아짐 = 턱
         risk = RISK_DANGER;
         hazard = HAZARD_EXIT_STEP;
+        eventDepthM = -delta - d.holeDepthM;
         d.inHole = false;
         d.holeDepthM = 0.0;
         d.holeWidthM = 0.0;
@@ -1110,6 +1129,8 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
     d.risk = risk;
     d.hazard = hazard;
     d.riskAtMs = now;
+    d.riskWidthM = eventWidthM;
+    d.riskDepthM = eventDepthM;
   }
 }
 
@@ -1143,8 +1164,10 @@ void updateOverallRisk(unsigned long now) {
 void outputHazardLine() {
   uint8_t s = overallRiskSensor;
   uint16_t distanceMm = (s < US_COUNT) ? usDistanceMm[s] : 0;
-  uint16_t widthMm = (s < US_COUNT) ? (uint16_t)(detectors[s].holeWidthM * 1000.0) : 0;
-  uint16_t depthMm = (s < US_COUNT) ? (uint16_t)(detectors[s].holeDepthM * 1000.0) : 0;
+  // 판정 당시의 값이다. STAIR/EXIT_STEP은 판정과 동시에 홈 상태를 지우므로
+  // 현재 상태를 읽으면 항상 0이 나간다.
+  uint16_t widthMm = (s < US_COUNT) ? (uint16_t)(detectors[s].riskWidthM * 1000.0) : 0;
+  uint16_t depthMm = (s < US_COUNT) ? (uint16_t)(detectors[s].riskDepthM * 1000.0) : 0;
 
   Serial.print(F("H,"));
   Serial.print((uint8_t)overallRisk);

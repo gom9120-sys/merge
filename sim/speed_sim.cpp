@@ -3,7 +3,7 @@
 #include <math.h>
 unsigned long g_millis = 0;
 #include "Wire.h"
-SerialClass Serial; WireClass Wire;
+SerialClass Serial; WireClass Wire; bool g_serialEcho = false;
 #include "../merge.ino"
 static unsigned long rs = 7;
 static double urand(){ rs = rs*6364136223846793005ULL + 1442695040888963407ULL;

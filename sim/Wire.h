@@ -24,22 +24,25 @@ extern unsigned long g_millis; inline unsigned long millis() { return g_millis; 
 inline unsigned long micros() { return 0; }
 inline void delay(unsigned long) {}
 inline void delayMicroseconds(unsigned int) {}
+// g_serialEcho 를 true 로 두면 Serial 출력이 stdout 으로 그대로 나온다.
+extern bool g_serialEcho;
 struct SerialClass {
   void begin(unsigned long) {}
-  void print(const char*) {}
-  void print(int, int = DEC) {}
-  void print(unsigned int, int = DEC) {}
-  void print(long, int = DEC) {}
-  void print(unsigned long, int = DEC) {}
-  void print(unsigned char, int = DEC) {}
-  void print(char) {}
-  void print(double, int = 2) {}
-  void println(const char*) {}
-  void println(int, int = DEC) {}
-  void println(unsigned int, int = DEC) {}
-  void println(unsigned long, int = DEC) {}
-  void println(unsigned char, int = DEC) {}
-  void println(double, int = 2) {}
+  void print(const char* v) { if (g_serialEcho) fputs(v, stdout); }
+  void print(char v) { if (g_serialEcho) fputc(v, stdout); }
+  void print(int v, int = DEC) { if (g_serialEcho) printf("%d", v); }
+  void print(unsigned int v, int = DEC) { if (g_serialEcho) printf("%u", v); }
+  void print(long v, int = DEC) { if (g_serialEcho) printf("%ld", v); }
+  void print(unsigned long v, int = DEC) { if (g_serialEcho) printf("%lu", v); }
+  void print(unsigned char v, int = DEC) { if (g_serialEcho) printf("%u", v); }
+  void print(double v, int d = 2) { if (g_serialEcho) printf("%.*f", d, v); }
+  void println() { if (g_serialEcho) fputc('\n', stdout); }
+  void println(const char* v) { print(v); println(); }
+  void println(int v, int b = DEC) { print(v, b); println(); }
+  void println(unsigned int v, int b = DEC) { print(v, b); println(); }
+  void println(unsigned long v, int b = DEC) { print(v, b); println(); }
+  void println(unsigned char v, int b = DEC) { print(v, b); println(); }
+  void println(double v, int d = 2) { print(v, d); println(); }
 };
 extern SerialClass Serial;
 struct WireClass {
