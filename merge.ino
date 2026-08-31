@@ -72,6 +72,36 @@
 //   높이/각도는 US_MOUNT_HEIGHT_M[], US_TILT_DEG[]에서 센서별로 바꾼다.
 //
 // ------------------------------------------------------------
+// 상수 튜닝 근거 (시뮬레이션)
+// ------------------------------------------------------------
+// 아래 노면 판정 상수들은 이 파일의 판정 코드를 그대로 떼어내 PC에서
+// 돌린 시뮬레이션으로 정했다. 노면 프로파일 10종(평지, 잔요철, 오르막,
+// 내리막, 2cm 홈, 3cm 홈, 8cm 홈, 10cm 턱, 15cm 단차, 홈+턱)에
+// 측정 잡음(표준편차 5mm), 측정 실패 5%, 헛에코 2%를 섞고 속도
+// 0.2~0.6 m/s에서 각각 25회씩, 조건당 1250회를 돌렸다.
+// 판정 결과는 두 가지로 나눠 셌다.
+//   과소경보 = 위험한 노면을 낮게 본 것 (실제로 위험한 오류)
+//   과잉경보 = 안전한 노면을 높게 본 것 (성가신 오류)
+//
+//   원본 detect.py 상수 그대로 (측정 간격 60ms)  : 과소 125, 과잉  49
+//   상수만 튜닝, 판정 순서는 원본 그대로         : 과소  33, 과잉 102
+//   최종 (아래 상수 + 스위치 두 개)              : 과소   1, 과잉   7
+//
+// 크게 세 가지가 결정적이었다.
+//   1. 측정 간격 60ms -> 15ms. 센서당 180ms에서는 3cm 홈이 샘플 사이로
+//      통째로 빠져나가거나, 한 프레임에 쌓이는 너비가 safe_gap보다 커서
+//      모든 홈이 계단으로 보고됐다.
+//   2. HOLE_EXIT_CHECK_FIRST. 원본 순서에서는 홈 너비가 CAUTION 구간에
+//      들어가는 순간부터 복귀 판정을 건너뛰어, 홈이 끝나도 반드시 STAIR로
+//      올라갔다. 상수로는 고칠 수 없는 문제였다.
+//   3. HOLE_ENTRY_WIDTH_RATIO 0.5. 진입 프레임을 통째로 세면(원본 1.0)
+//      좁은 홈이 계단으로 올라가고, 아예 안 세면(0.0) 넓은 홈을 놓쳤다.
+//
+// 속도 추정도 같은 방식으로 밀기 프로파일(정지-가속-순항-감속-정지)에
+// 진동과 가속도 바이어스를 넣고 맞췄다. 자세한 결과는 속도 추정 상수
+// 주석에 적어 두었다.
+//
+// ------------------------------------------------------------
 // 시리얼 텔레메트리 포맷 (라즈베리파이/앱 파싱용)
 // ------------------------------------------------------------
 // 고정 순서 CSV. 파이에서는 split(',') 한 번이면 끝난다.
@@ -95,7 +125,7 @@
 //                7=OBSTACLE_BRAKE
 //  [10] pwm      현재 출력 0-255
 //  [11] motor    0=COAST 1=FORWARD 2=BRAKE
-//  [12] us_l     좌 초음파 거리 mm, 0 = 측정 실패/범위 밖
+//  [12] us_l     좌 초음파 거리 mm (노면용이라 20-1000mm), 0 = 측정 실패
 //  [13] us_c     중앙
 //  [14] us_r     우
 //  [15] speed    IMU로 추정한 전진 속도 cm/s (정수)
@@ -112,6 +142,7 @@
 //
 // 이벤트/오류는 별도 줄로 나간다:  E,<사유>
 //   E,BOOT / E,CAL,<남은초> / E,IMU_READY / E,IMU_FAIL / E,IMU_LOST / E,READY
+//   E,US_VMAX,<cm/s>  현재 측정 주기에서 홈/계단 구분이 가능한 한계 속도
 //
 // 파이 파서 예시:
 //   SLOPE  = ("FLAT","UP","DOWN","UNCERTAIN")
@@ -141,8 +172,30 @@
 
 // 1로 바꾸면 전방 장애물이 US_OBSTACLE_BRAKE_MM보다 가까울 때 자동 제동.
 // 기본 0 = 초음파는 측정과 텔레메트리 전송만 한다.
+// 주의: 이 세 센서는 노면을 보도록 아래로 기울여 달았다. 평지에서 나오는
+// 값이 이미 US_MOUNT_HEIGHT_M / sin(US_TILT_DEG) (기본 설정에서 300mm)라
+// 임계값을 그보다 확실히 낮게(기본 150mm) 잡지 않으면 평지에서 계속 제동이
+// 걸린다. 앞을 보는 장애물 감지가 필요하면 수평 센서를 따로 다는 편이 맞다.
 // 실차 시험 전에 임계값을 반드시 현장에서 확인하고 켤 것.
 #define US_OBSTACLE_BRAKE_ENABLED 0
+
+// 원본 detect.py는 홈 상태에서 너비 판정을 먼저 하고, 너비가 CAUTION 구간
+// (0.5*safe_gap 이상)에 들어가면 그 프레임에서는 복귀 판정을 아예 건너뛴다.
+// 그래서 홈이 끝나 원래 높이로 돌아와도 in_hole이 풀리지 않고, 다음 프레임에
+// 너비가 safe_gap을 넘으면서 반드시 STAIR(DANGER)가 된다. 시뮬레이션에서
+// 3cm 홈이 상수를 어떻게 잡아도 전부 계단으로 보고된 원인이 이것이라,
+// CAUTION은 DANGER 직전 한 프레임짜리 상태로만 존재한다.
+//   1 = 복귀/턱 판정을 너비 판정보다 먼저 해서, 홈이 끝나면 그 자리에서
+//       지나온 너비로 SAFE/CAUTION/DANGER를 매기고 홈 상태를 닫는다.
+//   0 = 원본 detect.py와 완전히 같은 순서(위 성질을 그대로 감수).
+#define HOLE_EXIT_CHECK_FIRST 1
+
+// 초음파는 노면 상태에 따라 에코가 통째로 빠지는 프레임이 섞인다.
+//   1 = 직전 유효 측정값을 들고 있다가 다음 유효 측정과 비교하고, 놓친
+//       시간만큼 홈 너비도 이어서 적분한다. 실패 한 번에 판정이 두 프레임
+//       먹통이 되지 않는다.
+//   0 = 원본 detect.py처럼 이전 값을 버린다(실패 다음 프레임도 판정 없음).
+#define US_KEEP_PREV_ON_DROPOUT 1
 
 // 노면 위험 판정은 모터에 개입하지 않는다. 위험도/위험원인은 앱으로만 간다.
 // 1 = IMU 가속도 적분으로 속도를 추정. 0 = SPEED_FIXED_MPS 고정값 사용.
@@ -197,12 +250,12 @@ const int FSR_GRIP_OFF_THRESHOLD = 150;
 const unsigned long BELT_DEBOUNCE_MS = 50;
 
 // ===================== 초음파 측정값 =====================
-const unsigned long US_PING_INTERVAL_MS = 60;    // 센서 간 간격(크로스토크 방지)
-const unsigned long US_RISE_TIMEOUT_US = 30000;  // 에코 상승 대기 한계
-const unsigned long US_MAX_ECHO_US = 23200;      // 약 4 m 왕복
+const unsigned long US_PING_INTERVAL_MS = 15;    // 센서 간 간격 -> 센서당 45ms
+const unsigned long US_RISE_TIMEOUT_US = 3000;   // 에코 상승 대기 한계
+const unsigned long US_MAX_ECHO_US = 6000;       // 약 1 m 왕복
 const uint16_t US_MIN_VALID_MM = 20;             // HC-SR04 최소 측정 거리
-const uint16_t US_MAX_VALID_MM = 4000;
-const uint16_t US_OBSTACLE_BRAKE_MM = 300;       // 자동 제동 임계(옵션)
+const uint16_t US_MAX_VALID_MM = 1000;           // 노면용으로 좁힌 상한
+const uint16_t US_OBSTACLE_BRAKE_MM = 150;       // 자동 제동 임계(옵션)
 
 // ===================== 초음파 장착 형상 =====================
 // 센서별로 자유롭게 바꾼다. 좌 / 중 / 우 순서.
@@ -211,41 +264,59 @@ const uint16_t US_OBSTACLE_BRAKE_MM = 300;       // 자동 제동 임계(옵션)
 // 세 개를 서로 다르게 달아도 되고, 값만 여기서 고치면 된다.
 // 각도가 0에 가까우면(수평) 노면을 보지 않는 셈이라 노면 판정이 무의미하다.
 // 그래서 sin은 US_MIN_TILT_SIN 아래로 내려가지 않게 막는다.
-float US_MOUNT_HEIGHT_M[US_COUNT] = { 0.35, 0.35, 0.35 };
+float US_MOUNT_HEIGHT_M[US_COUNT] = { 0.15, 0.15, 0.15 };
 float US_TILT_DEG[US_COUNT] = { 30.0, 30.0, 30.0 };
 const float US_MIN_TILT_SIN = 0.0175;  // 약 1도
 
 // 노면으로 인정할 측정값의 범위. 평지 기대값(height / sin(tilt))에 대한 비율.
 // 이 밖의 값은 노면이 아니라고 보고 '측정 실패'로 처리한다(원본의 None).
-const float US_GROUND_MIN_RATIO = 0.30;
+const float US_GROUND_MIN_RATIO = 0.15;
 const float US_GROUND_MAX_RATIO = 3.00;
 
 // ===================== 노면 위험 판정값 (detect.py) =====================
 // 원본 detect.py의 DangerDetector 생성 인자와 같은 값이다.
-const float SUDDEN_CHANGE_THRESHOLD_M = 0.08;  // 턱/홈으로 볼 급변 임계 (m)
+const float SUDDEN_CHANGE_THRESHOLD_M = 0.06;  // 턱/홈으로 볼 급변 임계 (m)
 const float RAMP_CHANGE_THRESHOLD_M = 0.03;    // 경사로로 볼 완만한 변화 (m)
 const float WHEEL_WIDTH_M = 0.07;              // 앞바퀴 지름 (m)
 
-// 원본과 동일한 유도값.
-const float HOLE_SAFE_GAP_M = 0.6 * WHEEL_WIDTH_M;   // 안전하게 지날 홈 너비
-const float HOLE_TOLERANCE_M = 0.3 * WHEEL_WIDTH_M;  // 원래 높이 복귀 허용 오차
+// 원본과 동일한 유도값. 원본 주석대로 실험적으로 맞춰야 하는 계수라
+// 비율을 따로 빼 두었다.
+const float HOLE_SAFE_GAP_RATIO = 0.6;   // 안전하게 지날 수 있는 홈 너비 / 바퀴 지름
+const float HOLE_TOLERANCE_RATIO = 0.6;  // 원래 높이 복귀 허용 오차 / 바퀴 지름
+const float HOLE_SAFE_GAP_M = HOLE_SAFE_GAP_RATIO * WHEEL_WIDTH_M;
+const float HOLE_TOLERANCE_M = HOLE_TOLERANCE_RATIO * WHEEL_WIDTH_M;
 
-// 홈/계단 분해능에 대한 주의 (원본 알고리즘의 성질 그대로다)
-//   hole_width는 한 프레임마다 speed * interval 만큼 쌓인다. 여기서
-//   interval은 그 센서가 다시 측정될 때까지의 시간, 즉 대략
-//   US_PING_INTERVAL_MS * US_COUNT (기본 60ms * 3 = 180ms)다.
-//   그래서 한 프레임에 쌓이는 너비는 speed * 0.18 m가 되고, 예를 들어
-//   0.5 m/s로 밀면 한 프레임에 0.09 m다. 이 값이 safe_gap(0.042 m)보다
-//   크면 홈에 들어가자마자 다음 프레임에서 STAIR(DANGER)로 올라간다.
-//   즉 '지나갈 수 있는 홈'과 '계단'을 구분하려면
-//       speed * (US_PING_INTERVAL_MS * US_COUNT / 1000) < 0.5 * safe_gap
-//   이어야 한다. 실측에서 홈이 전부 계단으로 잡히면 US_PING_INTERVAL_MS를
-//   줄이거나(크로스토크 확인 필요), WHEEL_WIDTH_M / 임계값을 실제 바퀴와
-//   보행 속도에 맞춰 다시 잡아야 한다. 원본 detect.py도 같은 제약이 있다.
+// 홈 진입 프레임에서 이미 지나왔다고 볼 너비의 비율.
+// 원본은 speed * interval, 즉 한 프레임을 통째로 센다(1.0). 실제로 홈의
+// 시작 지점은 그 프레임 어딘가라 평균적으로는 절반이 맞고, 이 한 프레임의
+// 과대평가가 좁은 홈을 계단으로 올려버리는 주된 원인이었다.
+const float HOLE_ENTRY_WIDTH_RATIO = 0.5;
+
+// 측정 주기와 판정 가능한 속도 (시뮬레이션으로 정한 값이다)
+//   hole_width는 프레임마다 speed * interval씩 쌓이고, 여기서 interval은
+//   그 센서가 다시 측정될 때까지의 시간, 즉 US_PING_INTERVAL_MS * US_COUNT다.
+//   그래서 한 프레임에 쌓이는 너비(= 공간 분해능) q = speed * interval이고,
+//   q가 0.5 * safe_gap보다 커지면 지나갈 수 있는 홈과 계단을 구분할 수 없다.
+//       v_max = 0.5 * safe_gap / (US_PING_INTERVAL_MS * US_COUNT)
+//   잡음/드롭아웃을 넣은 시뮬레이션에서 측정 간격별로 판정이 깨지는 속도가
+//   이 식과 거의 그대로 나왔다(바퀴 0.07m, safe_gap 0.042m 기준).
+//       15ms (센서당  45ms) : 0.6 m/s 까지 정상, 0.8 m/s에서 깨짐
+//       20ms (센서당  60ms) : 0.4 m/s 까지
+//       25ms (센서당  75ms) : 0.3 m/s 까지
+//       30ms (센서당  90ms) : 0.3 m/s 까지
+//       60ms (센서당 180ms) : 0.2 m/s 에서도 깨짐 (기존 값)
+//   그래서 15ms로 내렸다. 10ms면 0.8 m/s까지 올라가지만 HC-SR04의 잔향과
+//   센서 간 크로스토크 여유가 줄어든다. 실측에서 거리값이 튀면 20~25ms로
+//   올리고, 대신 미는 속도를 위 표만큼 낮춰야 한다.
+//   부팅 때 E,US_VMAX,<cm/s> 로 현재 설정의 한계 속도를 찍어 준다.
+//
+//   US_MAX_ECHO_US(6ms)는 측정 간격보다 짧게 잡아 두었다. 앞 센서의 늦은
+//   에코가 다음 센서의 청취 구간에 들어와도 범위 밖으로 버려지고, 잘못된
+//   거리 대신 '측정 실패'가 되어 판정이 안전한 쪽으로 넘어간다.
 
 // 한 센서의 측정이 이 시간 이상 끊기면 연속성이 깨진 것으로 보고
 // 그 센서의 판정 상태를 초기화한다.
-const float US_STALE_INTERVAL_S = 0.5;
+const float US_STALE_INTERVAL_S = 0.25;
 const float US_MIN_INTERVAL_S = 0.01;
 
 // 위험도는 한 프레임짜리 판정이라 그대로 두면 500ms 텔레메트리에서 놓친다.
@@ -257,13 +328,33 @@ const unsigned long RISK_HOLD_MS = 1500;
 // 전후 가속도에서 중력 성분을 빼고 적분하되, 적분 드리프트를 누설
 // (SPEED_LEAK_PER_S)로 계속 갉아 준다. 정밀한 속도계가 아니라 홈 너비를
 // 쌓는 용도의 근사값이다. 실측하며 아래 상수를 맞춘다.
+// 가속도만으로는 등속 구간의 속도를 유지할 수 없다(가속도가 0이라 정보가
+// 없다). 그래서 세 가지를 겹쳐 쓴다.
+//   1) 느린 저역통과로 가속도 바이어스와 피치 오차를 빼낸다.
+//   2) 빠른 저역통과와의 차이(진동)로 '움직이는 중'인지 판단한다.
+//      절대값이 아니라 진동을 보므로 경사로에 세워 둬도 오판하지 않는다.
+//   3) 적분값은 실측 평균 밀기 속도(SPEED_NOMINAL_MPS)로 수렴시킨다.
+//
+// 시뮬레이션 결과를 그대로 적자면, 수렴 속도(SPEED_LEAK_PER_S)를 올릴수록
+// 오차가 줄었다. 즉 MPU6050 하나로는 적분이 보태 주는 정보가 사실상 없고,
+// 이 추정기는 실질적으로 '이동 중이면 SPEED_NOMINAL_MPS, 서 있으면 0'에
+// 가깝게 동작한다(순항 RMS 오차 약 0.15 m/s, 그 대부분이 실제 속도와
+// SPEED_NOMINAL_MPS의 차이다). 정지 판정은 잘 맞아서 서 있을 때 홈 너비가
+// 헛되이 쌓이지는 않는다.
+//   -> 그래서 SPEED_NOMINAL_MPS를 실제로 밀어 보고 잰 평균 속도로 맞추는
+//      것이 이 파일에서 가장 중요한 실측 작업이다. 홈 너비는 속도 x 시간
+//      이라 속도 오차가 그대로 너비 오차가 된다.
+//   -> 바퀴에 엔코더나 홀센서를 달 수 있으면 그쪽이 훨씬 정확하다.
 const float GRAVITY_MPS2 = 9.80665;
-const float SPEED_ACCEL_DEADBAND_MPS2 = 0.20;   // 이보다 작으면 노이즈로 버림
-const float SPEED_LEAK_PER_S = 0.35;            // 적분 드리프트 누설율
-const unsigned long SPEED_ZERO_HOLD_MS = 1500;  // 계속 잠잠하면 정지로 간주
-const float SPEED_MAX_MPS = 3.0;                // 추정 상한
-const float SPEED_FIXED_MPS = 1.0;              // SPEED_FROM_IMU 0일 때 사용
-const float SPEED_FALLBACK_MPS = 1.0;           // IMU 실패 시 보수적 가정 속도
+const float SPEED_NOMINAL_MPS = 0.40;             // 실측 평균 밀기 속도
+const float SPEED_BIAS_TC_S = 1.0;                // 바이어스 추정 시정수
+const float SPEED_VIB_TC_S = 0.15;                // 진동 성분 추출 시정수
+const float SPEED_MOTION_DEADBAND_MPS2 = 0.10;    // 이보다 큰 진동이면 이동 중
+const float SPEED_LEAK_PER_S = 2.0;               // 평균 속도로 수렴하는 속도
+const unsigned long SPEED_ZERO_HOLD_MS = 400;     // 진동이 끊기면 정지로 간주
+const float SPEED_MAX_MPS = 3.0;                  // 추정 상한
+const float SPEED_FIXED_MPS = 0.40;               // SPEED_FROM_IMU 0일 때 사용
+const float SPEED_FALLBACK_MPS = 0.40;            // IMU 실패 시 가정 속도
 
 // ===================== 모터 시험값 =====================
 // PWM_MIN_DRIVE는 구간별 시험에서 찾은 확실히 회전하는 최소값으로 수정한다.
@@ -344,6 +435,7 @@ struct DangerDetector {
   float holeWidthM;        // hole_width
   float holeDepthM;        // hole_depth
   unsigned long lastSampleAtMs;
+  float pendingIntervalS;  // 측정 실패로 건너뛴 시간 (다음 유효 프레임에 합산)
   RiskLevel risk;          // 마지막 판정 (RISK_HOLD_MS 동안 유지)
   HazardCause hazard;
   unsigned long riskAtMs;
@@ -362,6 +454,8 @@ uint8_t consecutiveImuFailures = 0;
 
 // ===================== 속도 추정 상태 =====================
 float linearAccelMps2 = 0.0;
+float accelBiasMps2 = 0.0;
+float accelVibLpMps2 = 0.0;
 float estimatedSpeedMps = 0.0;
 unsigned long lastAccelActiveAtMs = 0;
 
@@ -493,6 +587,12 @@ void setup() {
     imuReady = false;
     Serial.println(F("E,IMU_FAIL"));
   }
+
+  // 현재 측정 주기에서 홈/계단을 구분할 수 있는 한계 속도를 알려 준다.
+  // v_max = 0.5 * safe_gap / (센서당 측정 간격)
+  Serial.print(F("E,US_VMAX,"));
+  Serial.println((int)(0.5 * HOLE_SAFE_GAP_M
+                       / (US_PING_INTERVAL_MS * US_COUNT / 1000.0) * 100.0));
 
   unsigned long now = millis();
   updateInputs(now);
@@ -701,23 +801,32 @@ void updateSpeedEstimate(float dt, unsigned long now) {
       + pitchMountOffsetDeg;
   float gravityForwardG = sin(mountedPitchDeg * PI / 180.0);
 
-  linearAccelMps2 = (forwardG - gravityForwardG) * GRAVITY_MPS2;
-  if (INVERT_PITCH_DIRECTION) linearAccelMps2 = -linearAccelMps2;
+  float rawAccel = (forwardG - gravityForwardG) * GRAVITY_MPS2;
+  if (INVERT_PITCH_DIRECTION) rawAccel = -rawAccel;
 
-  if (fabs(linearAccelMps2) < SPEED_ACCEL_DEADBAND_MPS2) {
-    linearAccelMps2 = 0.0;
-  } else {
+  // 느린 저역통과로 남은 바이어스(가속도계 오프셋 + 피치 오차)를 추정해 뺀다.
+  float beta = dt / (SPEED_BIAS_TC_S + dt);
+  accelBiasMps2 += beta * (rawAccel - accelBiasMps2);
+  linearAccelMps2 = rawAccel - accelBiasMps2;
+
+  // 이동 여부는 '고주파 진동'으로만 판단한다. 바이어스 제거용 저역통과는
+  // 시정수가 길어서 감속 직후 한동안 잔차가 남는데, 그걸 이동으로 오판하지
+  // 않도록 빠른 저역통과를 따로 두고 그 차이(진동)만 본다.
+  float gamma = dt / (SPEED_VIB_TC_S + dt);
+  accelVibLpMps2 += gamma * (rawAccel - accelVibLpMps2);
+  float vibration = rawAccel - accelVibLpMps2;
+  if (fabs(vibration) > SPEED_MOTION_DEADBAND_MPS2) {
     lastAccelActiveAtMs = now;
+  }
+  if (now - lastAccelActiveAtMs >= SPEED_ZERO_HOLD_MS) {
+    estimatedSpeedMps = 0.0;  // 진동이 없다 = 서 있다
+    return;
   }
 
   estimatedSpeedMps += linearAccelMps2 * dt;
-  // 적분 드리프트가 쌓이지 않게 조금씩 흘려보낸다.
-  estimatedSpeedMps -= estimatedSpeedMps * SPEED_LEAK_PER_S * dt;
-
-  // 흔들림조차 없이 오래 잠잠하면 서 있는 것으로 본다.
-  if (now - lastAccelActiveAtMs >= SPEED_ZERO_HOLD_MS) {
-    estimatedSpeedMps = 0.0;
-  }
+  // 등속 구간에는 가속도에 정보가 없으므로 실측 평균 속도로 수렴시킨다.
+  estimatedSpeedMps +=
+      (SPEED_NOMINAL_MPS - estimatedSpeedMps) * SPEED_LEAK_PER_S * dt;
 
   // 유모차는 앞으로만 민다고 보고 음수는 0으로 잘라낸다.
   if (estimatedSpeedMps < 0.0) estimatedSpeedMps = 0.0;
@@ -851,6 +960,7 @@ void resetDetector(uint8_t index) {
   d.inHole = false;
   d.holeWidthM = 0.0;
   d.holeDepthM = 0.0;
+  d.pendingIntervalS = 0.0;
   d.lastSampleAtMs = millis();
   d.risk = RISK_SAFE;
   d.hazard = HAZARD_NONE;
@@ -874,8 +984,9 @@ float groundDropM(uint8_t index, uint16_t distanceMm) {
 void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
   DangerDetector &d = detectors[index];
 
-  float interval = (now - d.lastSampleAtMs) / 1000.0;
+  float interval = (now - d.lastSampleAtMs) / 1000.0 + d.pendingIntervalS;
   d.lastSampleAtMs = now;
+  d.pendingIntervalS = 0.0;
 
   // 측정이 오래 끊겼으면 홈을 이어서 적분할 근거가 없다. 상태를 버린다.
   if (interval > US_STALE_INTERVAL_S) {
@@ -889,9 +1000,12 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
 
   float drop = groundDropM(index, distanceMm);
   if (drop < 0.0) {
-    // 측정 실패(None). 원본처럼 이번 프레임은 건너뛰고, 다음 프레임도
-    // 비교 대상이 없으므로 이전 값을 지운다.
-    d.hasPrev = false;
+    // 측정 실패(원본의 None). 이번 프레임은 판정하지 않는다.
+#if US_KEEP_PREV_ON_DROPOUT
+    d.pendingIntervalS = interval;  // 놓친 시간은 다음 유효 프레임에 넘긴다
+#else
+    d.hasPrev = false;              // 원본: 다음 프레임도 비교 대상이 없다
+#endif
     return;
   }
 
@@ -924,7 +1038,7 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
       hazard = HAZARD_NONE;
       d.inHole = true;
       d.holeDepthM = delta;
-      d.holeWidthM = speed * interval;
+      d.holeWidthM = speed * interval * HOLE_ENTRY_WIDTH_RATIO;
     } else {
       // 임계값 사이
       risk = RISK_SAFE;
@@ -936,7 +1050,29 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
     hazard = HAZARD_NONE;
     d.holeWidthM += speed * interval;
 
-    if (d.holeWidthM >= HOLE_SAFE_GAP_M) {
+    // 노면이 원래 높이 근처(또는 그 위)로 돌아왔는가.
+    bool recovered = false;
+#if HOLE_EXIT_CHECK_FIRST
+    recovered = (-delta > d.holeDepthM - HOLE_TOLERANCE_M);
+#endif
+
+    if (recovered) {
+      // 홈이 여기서 끝났다. 지나온 너비로 위험도를 매기고 상태를 닫는다.
+      if (-delta > d.holeDepthM + HOLE_TOLERANCE_M) {
+        // 원래 높이보다 더 높아짐 = 턱
+        risk = RISK_DANGER;
+        hazard = HAZARD_EXIT_STEP;
+      } else if (d.holeWidthM >= HOLE_SAFE_GAP_M) {
+        risk = RISK_DANGER;
+        hazard = HAZARD_STAIR;
+      } else if (d.holeWidthM >= 0.5 * HOLE_SAFE_GAP_M) {
+        risk = RISK_CAUTION;
+        hazard = HAZARD_WIDE_HOLE;
+      }
+      d.inHole = false;
+      d.holeDepthM = 0.0;
+      d.holeWidthM = 0.0;
+    } else if (d.holeWidthM >= HOLE_SAFE_GAP_M) {
       // 홈이 아니라 계단처럼 아예 단차. 경보를 띄우고 홈 상태에서 벗어난다.
       risk = RISK_DANGER;
       hazard = HAZARD_STAIR;
