@@ -33,6 +33,7 @@ static double h_ramp_up(double x)   { return x < 0.3 ? 0.0 : (x - 0.3) * 0.18; }
 static double h_ramp_dn(double x)   { return x < 0.3 ? 0.0 : -(x - 0.3) * 0.18; }
 static double h_crack(double x)     { return (x > 0.5 && x < 0.52) ? -0.10 : 0.0; }   // 2cm 홈
 static double h_hole_med(double x)  { return (x > 0.5 && x < 0.53) ? -0.10 : 0.0; }   // 3cm 홈
+static double h_hole_5cm(double x)  { return (x > 0.5 && x < 0.55) ? -0.10 : 0.0; }   // 5cm 홈
 static double h_hole_wide(double x) { return (x > 0.5 && x < 0.58) ? -0.12 : 0.0; }   // 8cm 홈
 static double h_curb_up(double x)   { return x > 0.5 ? 0.10 : 0.0; }                  // 10cm 턱
 static double h_dropoff(double x)   { return x > 0.5 ? -0.15 : 0.0; }                 // 15cm 단차/계단
@@ -41,24 +42,76 @@ static double h_exit_step(double x) { if (x > 0.5 && x < 0.53) return -0.10;
 
 #define M(r) (1 << (r))
 static Scenario SCENARIOS[] = {
-  { "flat",       h_flat,      1.5, RISK_SAFE,    RISK_SAFE,    0 },
-  { "rough",      h_rough,     1.5, RISK_SAFE,    RISK_SAFE,    0 },
-  { "ramp_up",    h_ramp_up,   1.5, RISK_SAFE,    RISK_SAFE,    0 },
-  { "ramp_down",  h_ramp_dn,   1.5, RISK_SAFE,    RISK_SAFE,    0 },
-  { "crack_2cm",  h_crack,     1.5, RISK_SAFE,    RISK_CAUTION, 0 },
-  { "hole_3cm",   h_hole_med,  1.5, RISK_CAUTION, RISK_DANGER,  0 },
-  { "hole_8cm",   h_hole_wide, 1.5, RISK_DANGER,  RISK_DANGER,  0 },
-  { "curb_up",    h_curb_up,   1.5, RISK_DANGER,  RISK_DANGER,  0 },
-  { "dropoff",    h_dropoff,   1.5, RISK_DANGER,  RISK_DANGER,  0 },
-  { "exit_step",  h_exit_step, 1.5, RISK_DANGER,  RISK_DANGER,  0 },
+  { "flat",       h_flat,      2.0, RISK_SAFE,    RISK_SAFE,    0 },
+  { "rough",      h_rough,     2.0, RISK_SAFE,    RISK_SAFE,    0 },
+  { "ramp_up",    h_ramp_up,   2.0, RISK_SAFE,    RISK_SAFE,    0 },
+  { "ramp_down",  h_ramp_dn,   2.0, RISK_SAFE,    RISK_SAFE,    0 },
+  { "crack_2cm",  h_crack,     2.0, RISK_SAFE,    RISK_CAUTION, 0 },
+  // 3cm 홈은 safe_gap(4.2cm)보다 좁아 지나가도 되는 홈이다. SAFE가 정답이고
+  // CAUTION까지는 봐준다. 반대로 5cm 홈부터는 반드시 DANGER여야 한다.
+  { "hole_3cm",   h_hole_med,  2.0, RISK_SAFE,    RISK_CAUTION, 0 },
+  { "hole_5cm",   h_hole_5cm,  2.0, RISK_DANGER,  RISK_DANGER,  0 },
+  { "hole_8cm",   h_hole_wide, 2.0, RISK_DANGER,  RISK_DANGER,  0 },
+  { "curb_up",    h_curb_up,   2.0, RISK_DANGER,  RISK_DANGER,  0 },
+  { "dropoff",    h_dropoff,   2.0, RISK_DANGER,  RISK_DANGER,  0 },
+  { "exit_step",  h_exit_step, 2.0, RISK_DANGER,  RISK_DANGER,  0 },
 };
 static const int SCENARIO_COUNT = sizeof(SCENARIOS) / sizeof(SCENARIOS[0]);
 
 // 센서 측정 잡음 모델
 double NOISE_SIGMA_M = 0.005;   // 빗변 거리 표준편차
-double DROPOUT_P     = 0.05;    // 측정 실패 확률
 double OUTLIER_P     = 0.02;    // 헛에코 확률
 double OUTLIER_MIN_M = 0.05, OUTLIER_MAX_M = 0.10;
+
+// ---------- HC-SR04 빔 모델 ----------
+// 초음파는 연필 같은 선이 아니라 원뿔이다. HC-SR04는 유효 빔이 대략 15도
+// (반각 7.5도)라, 기울여 달면 노면을 꽤 넓은 띠로 비춘다. 그리고 거리계는
+// 그 띠 안에서 '가장 먼저 돌아온 에코', 즉 최단 거리를 값으로 내놓는다.
+//   -> 홈이 빔이 비추는 띠보다 좁으면, 홈 주변의 평지가 먼저 반향을 돌려줘서
+//      거리값이 아예 변하지 않는다. 즉 빔 폭이 곧 감지 가능한 최소 홈 너비다.
+//   -> 띠의 길이는 설치 각도로 정해진다.
+//        가까운 끝 = h / tan(각도 + 7.5), 먼 끝 = h / tan(각도 - 7.5)
+//      30도면 약 167mm, 45도면 80mm, 60도면 53mm, 90도(수직)면 39mm.
+// 이 효과를 빼고는 설치 각도를 고를 수 없어서 모델에 넣었다.
+const double BEAM_HALF_ANGLE_DEG = 7.5;
+
+// 스침각(grazing)에서는 노면이 거울처럼 반사해 에코가 통째로 사라진다.
+// 수직에 가까울수록 잘 돌아온다. sin(각도)로 실패 확률을 준다.
+double DROPOUT_BASE = 0.02, DROPOUT_GRAZE = 0.30;
+
+static double dropoutProb(double tiltDeg) {
+  double s = sin(tiltDeg * M_PI / 180.0);
+  return DROPOUT_BASE + DROPOUT_GRAZE * (1.0 - s) * (1.0 - s);
+}
+
+// 센서가 노면 위 위치 p에 있을 때 실제로 나오는 측정값(mm).
+// 빔 원뿔 안에 들어오는 노면 점들 중 최단 거리를 고른다. 0 = 측정 실패.
+static uint16_t measureMm(double p, double (*ground)(double), uint8_t idx) {
+  double h = US_MOUNT_HEIGHT_M[idx];
+  double tilt = US_TILT_DEG[idx];
+  double lo = (tilt - BEAM_HALF_ANGLE_DEG) * M_PI / 180.0;
+  double hi = (tilt + BEAM_HALF_ANGLE_DEG) * M_PI / 180.0;
+
+  double best = -1.0;
+  for (double x = p - 0.05; x < p + 1.2; x += 0.002) {
+    double dx = x - p;
+    double dz = h - ground(x);          // 센서에서 그 점까지의 수직 낙차
+    if (dz <= 0.0) continue;            // 센서보다 높은 노면은 안 본다
+    double phi = atan2(dz, dx);         // 내려다보는 각 (90도 = 바로 아래)
+    if (phi < lo || phi > hi) continue; // 빔 밖
+    double r = sqrt(dx * dx + dz * dz);
+    if (best < 0.0 || r < best) best = r;
+  }
+  if (best < 0.0) return 0;
+
+  double r = best + nrand() * NOISE_SIGMA_M;
+  double q = urand();
+  if (q < dropoutProb(tilt)) return 0;
+  if (q < dropoutProb(tilt) + OUTLIER_P)
+    r += OUTLIER_MIN_M + urand() * (OUTLIER_MAX_M - OUTLIER_MIN_M);
+  double mm = r * 1000.0;
+  return (mm < 0 || mm > 65000) ? 0 : (uint16_t)(mm + 0.5);
+}
 
 // 한 시나리오를 한 속도로 통과시키고 최대 위험도/원인을 돌려준다.
 void runScenario(const Scenario &sc, double speed, int *outRisk, int *outHazard) {
@@ -70,21 +123,9 @@ void runScenario(const Scenario &sc, double speed, int *outRisk, int *outHazard)
   g_millis = 1000;
   int maxRisk = RISK_SAFE, maxHazard = HAZARD_NONE;
 
-  for (double x = 0.0; x < sc.lengthM; x += speed * T) {
+  for (double p = 0.0; p < sc.lengthM; p += speed * T) {
     g_millis += (unsigned long)(T * 1000.0 + 0.5);
-    double drop = US_MOUNT_HEIGHT_M[0] - sc.h(x);
-    double slant = drop / usSinTilt[0] + nrand() * NOISE_SIGMA_M;
-
-    uint16_t mm;
-    double r = urand();
-    if (r < DROPOUT_P) mm = 0;
-    else {
-      if (r < DROPOUT_P + OUTLIER_P)
-        slant += OUTLIER_MIN_M + urand() * (OUTLIER_MAX_M - OUTLIER_MIN_M);
-      double v = slant * 1000.0;
-      mm = (v < 0 || v > 65000) ? 0 : (uint16_t)(v + 0.5);
-    }
-
+    uint16_t mm = measureMm(p, sc.h, 0);
     detectors[0].risk = RISK_SAFE;
     detectors[0].hazard = HAZARD_NONE;
     runTerrainDetector(0, mm, g_millis);
