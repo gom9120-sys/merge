@@ -1,28 +1,32 @@
 // ============================================================
-// merge_idle.ino - 보관용 이전 버전 (2026-09-03 시점)
+// merge_idle.ino - 임계값을 고정값으로 쓰는 판
 //
-// 현재 버전(../merge.ino)과 판정 알고리즘은 같다. 절대 기준거리에서
-// 벗어난 방향으로 턱/홈을 가르고, 턱은 최대 편차로 경사로와 구분한다.
-// 다른 점은 판정 임계값을 어디서 얻느냐 하나다.
+// ../merge.ino 와 코드가 같고 스위치 한 줄만 다르다.
+//     #define TERRAIN_THRESHOLD_FROM_CALIBRATION 0   <- 이 파일
+//     #define TERRAIN_THRESHOLD_FROM_CALIBRATION 1   <- ../merge.ino
 //
-//   이 파일      : 임계값이 고정 상수다.
-//                  STEP_ENTER_M 20mm / STEP_DANGER_M 40mm / HOLE_ENTER_M 40mm
-//                  부팅 보정은 기준거리(d0)만 잡는다.
+//   이 파일      : 턱시작 20mm / 턱확정 40mm / 홈시작 40mm 를 그대로 쓴다.
+//                  부팅 보정은 평지 기준거리(d0)만 잡는다.
 //   ../merge.ino : 부팅 보정에서 잡음까지 재서 임계값을 그 배수로 만들고,
-//                  빔 기하에서 나오는 하한(점프 상한, 경사로 겉보기 턱)을
-//                  함께 씌운다. 측정 실패 프레임에서 중앙값 버퍼를 비우던
-//                  버그도 고쳤다.
+//                  빔 기하에서 나오는 하한(홈의 점프 상한, 경사로가 만드는
+//                  겉보기 턱)을 함께 씌운다.
 //
 // 시뮬레이션 비교 (중앙 45도, 평지·요철·경사 400회 / 턱·단차 500회)
-//   이 파일      : 오경보 75/400,  턱·단차 미탐  7/500
-//   ../merge.ino : 오경보 18/400,  턱·단차 미탐 17/500
+//   이 파일      : 오경보 21/400,  턱·단차 미탐 12/500
+//   ../merge.ino : 오경보 13/400,  턱·단차 미탐 21/500
+// 고정값 쪽이 임계가 낮아 더 민감하다. 놓치는 것이 적은 대신 오경보가 는다.
 //
-// 현장에서 부팅 보정이 불안하거나(시동 위치를 평지로 잡기 어려운 경우)
-// 임계값을 손으로 못 박고 싶을 때 이 버전을 굽는다.
+// 시동 위치를 평지로 잡기 어렵거나 임계값을 손으로 못 박고 싶을 때 이쪽을
+// 굽는다. 어느 쪽이든 평지 기준거리 보정은 필요하다(E,US_CAL 이 나와야
+// 판정이 시작된다).
 //
-// 아두이노 IDE는 폴더 이름과 같은 .ino를 스케치로 연다. 그래서 merge.ino와
-// 한 폴더에 두지 않고 merge_idle/ 아래에 따로 두었다. 두 파일을 같은
-// 폴더에 두면 IDE가 둘을 이어붙여서 컴파일이 깨진다.
+// 이 파일은 merge.ino에서 스위치만 바꿔 만든 것이라, merge.ino가 바뀌면
+// 다시 만들어야 한다.
+//     sed 's/CALIBRATION 1$/CALIBRATION 0/' merge.ino > merge_idle/merge_idle.ino
+//     (그 뒤에 이 머리말을 다시 붙인다)
+//
+// 아두이노 IDE는 폴더 이름과 같은 .ino를 스케치로 연다. merge.ino와 한
+// 폴더에 두면 둘을 이어붙여 컴파일이 깨지므로 따로 두었다.
 // ============================================================
 
 #include <Wire.h>
@@ -177,7 +181,14 @@
 // 이벤트/오류는 별도 줄로 나간다:  E,<사유>
 //   E,BOOT / E,CAL,<남은초> / E,IMU_READY / E,IMU_FAIL / E,IMU_LOST / E,READY
 //   E,US_BEAM,<센서>,<빔길이mm>,<전방주시mm>  센서별 빔 기하 (부팅 시 3줄)
-//   E,US_BASE,<l>,<c>,<r>  평지에서 실측한 기준거리 mm (보정 완료 시 1회)
+//   E,US_CAL,<센서>,<기준거리>,<잡음>,<턱시작>,<턱확정>,<홈시작>  단위 mm
+//                          부팅 보정이 끝나면 센서별로 1줄씩 (총 3줄)
+//   E,US_ODD,<센서>,<실측mm>,<계산mm>  평지가 아닌 것을 보고 있다.
+//                          보정을 버리고 다시 잰다. 그 센서는 이 줄이 멈추고
+//                          E,US_CAL이 나올 때까지 판정에 참여하지 않는다.
+//
+// US_RAW_DEBUG를 1로 두면 진단용 줄이 추가로 나간다 (기본 0).
+//   R,<센서>,<원시mm>,<중앙값mm>,<편차mm>,<에코us>,<실패원인>  매 측정마다
 //
 // HUMAN_READABLE_LOG를 1로 바꾸면 '#'로 시작하는 사람이 읽는 줄이 하나 더
 // 나간다(기본 0, 현장 확인용). 아래 파서는 어차피 무시한다.
@@ -252,6 +263,17 @@
 //   # 13.900s SAFE   CLEAR
 #define HUMAN_READABLE_LOG 0
 
+// 진단용. 1로 두면 US_RAW_DEBUG_SENSOR 번 센서의 측정을 매 프레임 그대로
+// 내보낸다. 가만히 서 있는데 경보가 뜨거나, 거리값이 튀는 것 같을 때 쓴다.
+//     R,<센서>,<원시mm>,<중앙값mm>,<편차mm>,<에코us>,<실패원인>
+//   실패원인 0=정상 1=에코 안 올라옴(배선/전원) 2=에코 안 내려옴 3=범위 밖
+// 편차는 평지 기준거리 대비 노면 높이 변화다(+ 홈 / - 턱). 서 있으면 이 값이
+// 0 근처에 머물러야 한다. 두 값 사이를 규칙적으로 오가면 센서 간 크로스토크,
+// 불규칙하게 튀면 반향이 약한 것이다.
+// 9600 baud에서 한 센서분(약 20바이트 / 45ms)이 한계라 한 번에 하나만 본다.
+#define US_RAW_DEBUG 0
+#define US_RAW_DEBUG_SENSOR 1
+
 // 노면 위험 판정은 모터에 개입하지 않는다. 위험도/위험원인은 앱으로만 간다.
 // 1 = IMU 가속도 적분으로 속도를 추정. 0 = SPEED_FIXED_MPS 고정값 사용.
 // 홈의 너비는 속도 * 시간으로 쌓이므로, 실험 초반에 속도 추정이 불안하면
@@ -306,6 +328,9 @@ const unsigned long BELT_DEBOUNCE_MS = 50;
 
 // ===================== 초음파 측정값 =====================
 const unsigned long US_PING_INTERVAL_MS = 15;    // 센서 간 간격 -> 센서당 45ms
+// 트리거 후 에코가 올라오기를 기다리는 한계. 정품 HC-SR04는 0.5ms 안에
+// 올리지만 클론 중에는 더 걸리는 것이 있어 넉넉히 잡는다. 이 시간을 넘기면
+// '센서 응답 없음'(거리 0)이 된다 -- 배선이나 전원이 끊겼을 때의 증상이다.
 const unsigned long US_RISE_TIMEOUT_US = 3000;   // 에코 상승 대기 한계
 const unsigned long US_MAX_ECHO_US = 6000;       // 약 1 m 왕복
 const uint16_t US_MIN_VALID_MM = 20;             // HC-SR04 최소 측정 거리
@@ -361,12 +386,56 @@ const float US_GROUND_MAX_RATIO = 3.00;
 //             센서에는 노면이 올라오는 것처럼 잠깐 보이는데, 그 크기는
 //                 전방주시거리 * tan(경사각)
 //             뿐이라(45도/16cm에서 10도 경사면 28mm) 실제 턱의 수십 mm와
-//             크기로 갈린다. 최대 편차가 STEP_DANGER_M에 못 미친 채 노면이
+//             크기로 갈린다. 최대 편차가 턱 확정 임계에 못 미친 채 노면이
 //             돌아오면 경사로나 잔요철로 보고 조용히 끝낸다.
-const float STEP_ENTER_M = 0.020;    // 이만큼 올라오면 턱 판정 시작
-const float STEP_DANGER_M = 0.040;   // 턱 높이가 이 이상이면 DANGER
-const float HOLE_ENTER_M = 0.040;    // 이만큼 내려가면 홈으로 보고 DANGER
-const float TERRAIN_EXIT_M = 0.010;  // 이 아래로 돌아오면 노면 복귀
+// 임계값은 고정값으로 박지 않고 부팅 보정에서 만든다. 부팅 직후 평지를
+// 굴리는 동안 기준거리와 함께 그 구간의 잡음(표준편차)을 재고, 임계값을
+// 잡음의 배수로 잡는다. 센서 개체차, 노면 재질, 장착 상태가 달라도 따라간다.
+//   시작할 때 평지에 있어야 한다는 제약이 생기는 대신, 손으로 맞춘 숫자를
+//   현장마다 다시 맞출 필요가 없어진다.
+// 잡음이 비정상적으로 작게(또는 크게) 잡히는 경우를 막으려고 하한과 상한을
+// 함께 둔다.
+// 임계값을 어디서 얻을지 고르는 스위치.
+//   1 = 부팅 보정에서 잰 잡음의 배수로 만든다(기본). 센서 개체차나 노면
+//       재질이 달라도 따라가지만, 시동할 때 평지에 있어야 한다.
+//   0 = 아래 고정값을 그대로 쓴다. 보정은 기준거리만 잡는다. 시동 위치를
+//       평지로 잡기 어렵거나 임계값을 손으로 못 박고 싶을 때.
+// merge_idle/merge_idle.ino 가 이 스위치를 0으로 둔 같은 코드다.
+#define TERRAIN_THRESHOLD_FROM_CALIBRATION 0
+
+// 스위치가 0일 때 쓰는 고정 임계값.
+const float STEP_ENTER_FIXED_M = 0.020;
+const float STEP_DANGER_FIXED_M = 0.040;
+const float HOLE_ENTER_FIXED_M = 0.040;
+const float TERRAIN_EXIT_FIXED_M = 0.010;
+
+const float STEP_ENTER_SIGMA = 4.0;    // 턱 판정 시작 = 잡음의 몇 배
+const float STEP_DANGER_SIGMA = 8.0;   // 턱 확정
+const float HOLE_ENTER_SIGMA = 4.0;    // 홈 판정 시작
+const float TERRAIN_EXIT_SIGMA = 2.0;  // 노면 복귀
+
+const float STEP_ENTER_FLOOR_M = 0.010;
+const float STEP_DANGER_FLOOR_M = 0.030;
+const float HOLE_ENTER_FLOOR_M = 0.020;
+const float TERRAIN_THRESHOLD_CEIL_M = 0.080;  // 이보다 크면 보정을 의심한다
+
+// 홈 판정에는 기하에서 나오는 하한이 하나 더 있다. 빔 띠보다 좁은 홈은
+// 측정값이 '빔 안에서 두 번째로 가까운 지점'으로 옮겨가는 만큼만 튀는데,
+// 그 크기가 홈 깊이와 무관하게 아래 값으로 고정된다.
+//     점프 상한 = h * ( sin(각+반각) / sin(각-반각) - 1 )
+//     16cm 기준으로 45도 48mm, 65도 21mm, 85도 4mm
+// 홈 진입 임계를 이 값 위에 두면, 경보가 뜬 홈은 반드시 빔 띠보다 넓다.
+// 빔 띠는 이미 safe_gap(4.2cm)보다 기니까 '뜨면 확실히 위험한 홈'이 된다.
+const float HOLE_ENTER_CAP_MARGIN = 1.15;
+
+// 턱 판정에도 같은 성격의 기하 하한이 있다. 전방을 보는 센서에는 경사로에
+// 진입하는 것도 노면이 올라오는 것으로 보이는데, 그 크기가
+//     전방주시거리 * tan(경사각)
+// 이다. 45도(전방 160mm)에서 10도 경사면 29mm라 웬만한 턱과 맞먹는다.
+// 그래서 '이 각도까지의 경사로는 턱으로 보지 않는다'를 정하고, 턱 확정
+// 임계를 그 위에 둔다. 값을 올리면 경사로 오경보가 줄고 낮은 턱을 놓친다.
+const float RAMP_MAX_DEG = 10.0;
+const float STEP_DANGER_RAMP_MARGIN = 1.2;
 
 const float WHEEL_WIDTH_M = 0.07;    // 앞바퀴 지름 (m)
 
@@ -380,8 +449,22 @@ const float HOLE_SAFE_GAP_M = HOLE_SAFE_GAP_RATIO * WHEEL_WIDTH_M;
 // 타이어 공기압이나 장착 오차로 실제 높이가 조금 달라도 흡수된다. 평균이
 // 계산값과 너무 다르면(위험 지형 위에서 켠 경우) 계산값을 그대로 쓴다.
 const uint8_t US_BASELINE_SAMPLES = 20;
-const float US_BASELINE_MIN_RATIO = 0.7;
-const float US_BASELINE_MAX_RATIO = 1.4;
+// 보정에서 잰 기준거리가 계산값에서 이 비율 밖으로 벗어나면 평지를 보고
+// 있는 것이 아니다. 45도 센서는 앞을 보기 때문에 앞에 책상이나 벽이 있으면
+// 그 거리가 잡힌다(실측에서 202mm 기대에 418mm가 나온 적이 있다).
+//
+// 이때 계산값으로 슬쩍 되돌리면 안 된다. 센서는 계속 책상을 보는데 기준만
+// 노면 값이 되어, 편차가 영원히 크게 남고 조금만 흔들려도 턱과 홈이 번갈아
+// 뜬다. 그래서 보정을 받아들이지 않고 처음부터 다시 잰다. 그 센서는 평지가
+// 잡힐 때까지 판정에 참여하지 않는다.
+const float US_BASELINE_MIN_RATIO = 0.6;
+const float US_BASELINE_MAX_RATIO = 1.6;
+const float US_BASELINE_MAX_NOISE_M = 0.015;  // 이보다 흔들리면 경고한다
+
+// 판정 상태를 바꾸기 전에 같은 방향이 몇 프레임 연속으로 보여야 하는지.
+// 발이나 사람처럼 빔에 걸쳤다 빠졌다 하는 것이 한 프레임씩 튀면서 턱과 홈을
+// 번갈아 만들어내는 것을 막는다. 1로 두면 예전처럼 한 프레임에 바로 판정한다.
+const uint8_t TERRAIN_CONFIRM_FRAMES = 2;
 
 // 측정 주기
 //   센서 하나가 다시 측정될 때까지의 시간은 US_PING_INTERVAL_MS * US_COUNT,
@@ -488,8 +571,7 @@ enum MotorOutput : uint8_t {
 
 enum UsPhase : uint8_t {
   US_IDLE,
-  US_WAIT_RISE,
-  US_WAIT_FALL
+  US_MEASURING  // 한 번의 updateUltrasonic 안에서만 유지된다
 };
 
 // detect.py의 Risk / Hazard IntEnum과 값이 같다.
@@ -522,12 +604,20 @@ struct DangerDetector {
   float holeWidthM;        // 홈 상태에서 누적한 너비 (참고값)
   float holeDepthM;        // 홈의 최대 깊이
   float stepPeakM;         // 턱 상태에서 본 최대 높이
+  uint8_t holeVotes;       // 같은 방향이 연속으로 보인 프레임 수
+  uint8_t stepVotes;
   unsigned long lastSampleAtMs;
   uint16_t recentMm[3];    // 중앙값 필터용 최근 유효 측정
   uint8_t recentCount;
   float pendingIntervalS;  // 측정 실패로 건너뛴 시간 (다음 유효 프레임에 합산)
   float baselineSumM;      // 부팅 직후 기준거리 실측용
+  float baselineSumSqM;
   uint8_t baselineCount;
+  float noiseM;            // 보정 구간에서 잰 잡음 (수직 환산)
+  float stepEnterM;        // 아래 넷은 보정이 끝나면 잡음에서 만든다
+  float stepDangerM;
+  float holeEnterM;
+  float exitM;
   RiskLevel risk;          // 마지막 판정 (RISK_HOLD_MS 동안 유지)
   HazardCause hazard;
   unsigned long riskAtMs;
@@ -580,17 +670,23 @@ uint8_t telemetrySeq = 0;
 UsPhase usPhase = US_IDLE;
 uint8_t usIndex = 0;
 unsigned long usPingStartedAtMs = 0;
-unsigned long usTrigAtUs = 0;
-unsigned long usEchoStartUs = 0;
 uint16_t usDistanceMm[US_COUNT] = { 0, 0, 0 };
+
+// 진단용. 마지막 측정의 에코 길이(us)와 실패 원인.
+//   0 = 정상, 1 = 에코가 안 올라옴(배선/전원 의심), 2 = 에코가 안 내려옴,
+//   3 = 거리 범위 밖
+uint16_t usLastPulseUs[US_COUNT] = { 0, 0, 0 };
+uint8_t usLastFail[US_COUNT] = { 0, 0, 0 };
 
 // 설치 각도/높이에서 미리 계산해 두는 값.
 float usSinTilt[US_COUNT];
 float usExpectedFlatM[US_COUNT];
 float usBeamFootprintM[US_COUNT];  // 빔이 노면에 그리는 띠의 길이
 float usLookAheadM[US_COUNT];      // 센서 바로 아래에서 빔 중심까지의 거리
-float usBaselineM[US_COUNT];       // 평지에서 나오는 기준 거리 d0
+float usBaselineM[US_COUNT];       // 평지에서 나오는 기준 거리 d0 (실측)
+float usBaselineComputedM[US_COUNT];  // 설치값에서 계산한 기준 거리
 float usHeightGainM[US_COUNT];     // 거리 편차 -> 노면 높이 변화 계수 k
+float usJumpCapM[US_COUNT];        // 빔 띠보다 좁은 홈이 만드는 편차의 상한
 
 DangerDetector detectors[US_COUNT];
 
@@ -742,12 +838,21 @@ void loop() {
     }
     if (done && usPhase == US_IDLE) {
       baselineReported = true;
-      Serial.print(F("E,US_BASE,"));
-      Serial.print((int)(usBaselineM[0] * 1000.0));
-      Serial.print(',');
-      Serial.print((int)(usBaselineM[1] * 1000.0));
-      Serial.print(',');
-      Serial.println((int)(usBaselineM[2] * 1000.0));
+      // 센서별로 실측 기준거리, 잡음, 거기서 만든 임계값을 알린다 (mm)
+      for (uint8_t i = 0; i < US_COUNT; i++) {
+        Serial.print(F("E,US_CAL,"));
+        Serial.print(i);
+        Serial.print(',');
+        Serial.print((int)(usBaselineM[i] * 1000.0));
+        Serial.print(',');
+        Serial.print((int)(detectors[i].noiseM * 1000.0));
+        Serial.print(',');
+        Serial.print((int)(detectors[i].stepEnterM * 1000.0));
+        Serial.print(',');
+        Serial.print((int)(detectors[i].stepDangerM * 1000.0));
+        Serial.print(',');
+        Serial.println((int)(detectors[i].holeEnterM * 1000.0));
+      }
     }
   }
 
@@ -1002,49 +1107,67 @@ void updateInputs(unsigned long now) {
 // 한 번에 한 센서만 쏘고, 에코를 폴링으로 기다린다. pulseIn을 쓰면 센서당
 // 최대 30ms를 블로킹해서 3개면 90ms - 20ms 제어 주기가 무너진다.
 void updateUltrasonic(unsigned long now) {
-  switch (usPhase) {
-    case US_IDLE:
-      if (now - usPingStartedAtMs < US_PING_INTERVAL_MS) return;
-      usPingStartedAtMs = now;
-      digitalWrite(US_TRIG_PINS[usIndex], LOW);
-      delayMicroseconds(2);
-      digitalWrite(US_TRIG_PINS[usIndex], HIGH);
-      delayMicroseconds(10);
-      digitalWrite(US_TRIG_PINS[usIndex], LOW);
-      usTrigAtUs = micros();
-      usPhase = US_WAIT_RISE;
-      break;
+  if (usPhase != US_IDLE) return;
+  if (now - usPingStartedAtMs < US_PING_INTERVAL_MS) return;
+  usPingStartedAtMs = now;
 
-    case US_WAIT_RISE:
-      if (digitalRead(US_ECHO_PINS[usIndex]) == HIGH) {
-        usEchoStartUs = micros();
-        usPhase = US_WAIT_FALL;
-      } else if (micros() - usTrigAtUs > US_RISE_TIMEOUT_US) {
-        usDistanceMm[usIndex] = 0;  // 센서 응답 없음
-        finishPing();
-      }
-      break;
+  uint8_t trigPin = US_TRIG_PINS[usIndex];
+  uint8_t echoPin = US_ECHO_PINS[usIndex];
 
-    case US_WAIT_FALL:
-      if (digitalRead(US_ECHO_PINS[usIndex]) == LOW) {
-        usDistanceMm[usIndex] = pulseToMm(micros() - usEchoStartUs);
-        finishPing();
-      } else if (micros() - usEchoStartUs > US_MAX_ECHO_US) {
-        usDistanceMm[usIndex] = 0;  // 측정 범위 밖
-        finishPing();
-      }
-      break;
+  usPhase = US_MEASURING;
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  // 에코는 여기서 끝까지 잰다. 예전에는 상승/하강 대기를 loop() 여러 바퀴에
+  // 나눠 폴링했는데, 그 사이에 다른 일(특히 20ms마다 도는 IMU I2C 읽기,
+  // 약 1.3ms)이 끼면 하강 엣지를 늦게 보고 그 지연이 그대로 거리 오차가 됐다.
+  // 45도 센서의 실제 에코가 1.18ms라 지연과 크기가 같아서, 측정값이 두 갈래로
+  // 갈리고 보정이 그 가운데를 기준거리로 잡아 서 있어도 턱/홈이 번갈아 떴다.
+  // 측정 간격을 늘려도 소용이 없었던 이유는 IMU 주기의 배수라 충돌 위상이
+  // 고정됐기 때문이다.
+  //
+  // 막는 시간은 보통 1.3ms, 최악이라도 상승 대기 + 에코 한계다. 제어 주기가
+  // 20ms이고 핑은 그보다 드물게 나가므로 문제되지 않는다.
+  unsigned long trigAt = micros();
+  while (digitalRead(echoPin) == LOW) {
+    if (micros() - trigAt > US_RISE_TIMEOUT_US) {
+      usDistanceMm[usIndex] = 0;  // 센서 응답 없음
+      usLastPulseUs[usIndex] = 0;
+      usLastFail[usIndex] = 1;
+      finishPing();
+      return;
+    }
   }
+
+  unsigned long echoStart = micros();
+  while (digitalRead(echoPin) == HIGH) {
+    if (micros() - echoStart > US_MAX_ECHO_US) {
+      usDistanceMm[usIndex] = 0;  // 에코가 내려오지 않음
+      usLastPulseUs[usIndex] = US_MAX_ECHO_US;
+      usLastFail[usIndex] = 2;
+      finishPing();
+      return;
+    }
+  }
+
+  unsigned long pulseUs = micros() - echoStart;
+  usLastPulseUs[usIndex] = (pulseUs > 65000) ? 65000 : (uint16_t)pulseUs;
+  usDistanceMm[usIndex] = pulseToMm(pulseUs);
+  usLastFail[usIndex] = (usDistanceMm[usIndex] == 0) ? 3 : 0;
+  finishPing();
 }
 
 void finishPing() {
+  usPhase = US_IDLE;
   // 이 센서의 한 프레임이 완성됐으니 그 자리에서 노면 위험 판정을 돌린다.
   // 파이썬의 for prev, curr in zip(...) 한 바퀴에 해당한다.
   runTerrainDetector(usIndex, usDistanceMm[usIndex], millis());
 
   usIndex++;
   if (usIndex >= US_COUNT) usIndex = 0;
-  usPhase = US_IDLE;
 }
 
 uint16_t pulseToMm(unsigned long pulseUs) {
@@ -1090,7 +1213,18 @@ void setupTerrainDetectors() {
     float nearSin = sin(nearDeg * PI / 180.0);
     if (nearSin < US_MIN_TILT_SIN) nearSin = US_MIN_TILT_SIN;
     usBaselineM[i] = US_MOUNT_HEIGHT_M[i] / nearSin;
+    usBaselineComputedM[i] = usBaselineM[i];
     usHeightGainM[i] = nearSin;
+
+    // 빔 띠보다 좁은 홈이 만드는 편차의 상한. 빔의 가장 가까운 광선이 홈에
+    // 빠지면 측정값이 그 다음으로 가까운 지점(빔 먼 쪽 평지)으로 옮겨가는데,
+    // 그 크기가 홈 깊이와 무관하게 이 값으로 고정된다.
+    float farSin = sin(farDeg * PI / 180.0);
+    if (farDeg < 1.0 || farSin < US_MIN_TILT_SIN) {
+      usJumpCapM[i] = 0.0;
+    } else {
+      usJumpCapM[i] = US_MOUNT_HEIGHT_M[i] * (nearSin / farSin - 1.0);
+    }
 
     resetDetector(i);
   }
@@ -1103,11 +1237,20 @@ void resetDetector(uint8_t index) {
   d.holeWidthM = 0.0;
   d.holeDepthM = 0.0;
   d.stepPeakM = 0.0;
+  d.holeVotes = 0;
+  d.stepVotes = 0;
   d.pendingIntervalS = 0.0;
   d.recentCount = 0;
   d.recentMm[0] = d.recentMm[1] = d.recentMm[2] = 0;
   d.baselineSumM = 0.0;
+  d.baselineSumSqM = 0.0;
   d.baselineCount = 0;
+  d.noiseM = 0.0;
+  // 보정이 끝나기 전에도 안전한 쪽으로 동작하도록 하한으로 채워 둔다.
+  d.stepEnterM = STEP_ENTER_FLOOR_M;
+  d.stepDangerM = STEP_DANGER_FLOOR_M;
+  d.holeEnterM = HOLE_ENTER_FLOOR_M;
+  d.exitM = STEP_ENTER_FLOOR_M * 0.5;
   d.lastSampleAtMs = millis();
   d.risk = RISK_SAFE;
   d.hazard = HAZARD_NONE;
@@ -1158,6 +1301,9 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
   }
   if (interval < US_MIN_INTERVAL_S) interval = US_MIN_INTERVAL_S;
 
+  uint16_t rawMm = distanceMm;   // 진단용으로 필터 전 값을 남겨 둔다
+  (void)rawMm;
+
 #if US_MEDIAN_FILTER
   // 유효 측정만 밀어 넣고, 3개가 모이면 중앙값을 판정에 쓴다.
   if (distanceMm != 0) {
@@ -1172,6 +1318,25 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
 #endif
 
   float dev = terrainDeviationM(index, distanceMm);
+
+#if US_RAW_DEBUG
+  if (index == US_RAW_DEBUG_SENSOR) {
+    Serial.print(F("R,"));
+    Serial.print(index);
+    Serial.print(',');
+    Serial.print(rawMm);
+    Serial.print(',');
+    Serial.print(distanceMm);
+    Serial.print(',');
+    if (isnan(dev)) Serial.print(F("NA"));
+    else Serial.print((int)(dev * 1000.0));
+    Serial.print(',');
+    Serial.print(usLastPulseUs[index]);
+    Serial.print(',');
+    Serial.println(usLastFail[index]);
+  }
+#endif
+
   if (isnan(dev)) {
     // 측정 실패. 이번 프레임은 판정하지 않는다.
 #if US_KEEP_PREV_ON_DROPOUT
@@ -1179,21 +1344,97 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
 #else
     d.state = TERRAIN_IDLE;
 #endif
-    d.recentCount = 0;              // 끊긴 뒤의 중앙값은 믿을 수 없다
+    // 중앙값 버퍼는 그대로 둔다. 에코가 한 번 빠진 것이지 노면이 바뀐 것이
+    // 아니고, 여기서 버리면 다음 두 프레임이 필터를 거치지 않은 채 판정에
+    // 들어간다. 시뮬레이션에서 오경보의 대부분이 그 경로였다(75 -> 18/400).
     return;
   }
 
-  // 부팅 직후에는 평지를 달린다고 보고 기준거리를 실측으로 잡는다.
+  // 부팅 직후에는 평지를 달린다고 보고 기준거리와 잡음을 실측으로 잡는다.
   if (d.baselineCount < US_BASELINE_SAMPLES) {
-    d.baselineSumM += distanceMm / 1000.0;
+    float m = distanceMm / 1000.0;
+    d.baselineSumM += m;
+    d.baselineSumSqM += m * m;
     d.baselineCount++;
     if (d.baselineCount >= US_BASELINE_SAMPLES) {
-      float measured = d.baselineSumM / US_BASELINE_SAMPLES;
-      float computed = US_MOUNT_HEIGHT_M[index] / usHeightGainM[index];
-      // 위험 지형 위에서 켠 경우를 걸러낸다. 너무 다르면 계산값을 쓴다.
-      if (measured > computed * US_BASELINE_MIN_RATIO
-          && measured < computed * US_BASELINE_MAX_RATIO) {
-        usBaselineM[index] = measured;
+      float mean = d.baselineSumM / US_BASELINE_SAMPLES;
+      float var = d.baselineSumSqM / US_BASELINE_SAMPLES - mean * mean;
+      if (var < 0.0) var = 0.0;
+
+      float lo = usBaselineComputedM[index] * US_BASELINE_MIN_RATIO;
+      float hi = usBaselineComputedM[index] * US_BASELINE_MAX_RATIO;
+
+      if (mean < lo || mean > hi) {
+        // 평지가 아니다. 앞에 물체가 있거나 장착이 설정과 다르다.
+        // 받아들이지 말고 처음부터 다시 잰다.
+        Serial.print(F("E,US_ODD,"));
+        Serial.print(index);
+        Serial.print(',');
+        Serial.print((int)(mean * 1000.0));
+        Serial.print(',');
+        Serial.println((int)(usBaselineComputedM[index] * 1000.0));
+        d.baselineSumM = 0.0;
+        d.baselineSumSqM = 0.0;
+        d.baselineCount = 0;
+        return;
+      }
+
+      usBaselineM[index] = mean;
+
+      // 실측 기준거리에서 빔이 실제로 노면을 보는 각도를 역산한다.
+      //     sin(유효각) = 설치높이 / 실측 기준거리
+      // 거리 편차를 노면 높이로 바꾸는 계수가 이 각도에 걸려 있어서,
+      // 장착 오차만큼 계산값을 그대로 쓰면 편차가 부풀거나 줄어든다.
+      float effSin = US_MOUNT_HEIGHT_M[index] / mean;
+      if (effSin > 1.0) effSin = 1.0;
+      if (effSin < 0.05) effSin = 0.05;
+      usHeightGainM[index] = effSin;
+
+      // 잡음을 노면 높이로 환산한다. 임계값 산출과 별개로 기록해 둔다.
+      d.noiseM = sqrt(var) * usHeightGainM[index];
+
+#if TERRAIN_THRESHOLD_FROM_CALIBRATION
+      // 임계값을 잡음의 배수로 만든다.
+      d.stepEnterM = d.noiseM * STEP_ENTER_SIGMA;
+      d.stepDangerM = d.noiseM * STEP_DANGER_SIGMA;
+      d.holeEnterM = d.noiseM * HOLE_ENTER_SIGMA;
+
+      if (d.stepEnterM < STEP_ENTER_FLOOR_M) d.stepEnterM = STEP_ENTER_FLOOR_M;
+      if (d.stepDangerM < STEP_DANGER_FLOOR_M) d.stepDangerM = STEP_DANGER_FLOOR_M;
+      if (d.holeEnterM < HOLE_ENTER_FLOOR_M) d.holeEnterM = HOLE_ENTER_FLOOR_M;
+
+      // 경사로 진입이 만드는 겉보기 턱보다는 위에 둬야 한다.
+      float rampFloor = usLookAheadM[index]
+                        * tan(RAMP_MAX_DEG * PI / 180.0)
+                        * STEP_DANGER_RAMP_MARGIN;
+      if (d.stepDangerM < rampFloor) d.stepDangerM = rampFloor;
+
+      // 홈은 기하 상한 위로 올려서 '뜨면 빔 띠보다 넓은 홈'을 보장한다.
+      float capFloor = usJumpCapM[index] * HOLE_ENTER_CAP_MARGIN;
+      if (d.holeEnterM < capFloor) d.holeEnterM = capFloor;
+
+      if (d.stepEnterM > TERRAIN_THRESHOLD_CEIL_M) d.stepEnterM = TERRAIN_THRESHOLD_CEIL_M;
+      if (d.stepDangerM > TERRAIN_THRESHOLD_CEIL_M) d.stepDangerM = TERRAIN_THRESHOLD_CEIL_M;
+      if (d.holeEnterM > TERRAIN_THRESHOLD_CEIL_M) d.holeEnterM = TERRAIN_THRESHOLD_CEIL_M;
+      if (d.stepDangerM < d.stepEnterM) d.stepDangerM = d.stepEnterM;
+
+      d.exitM = d.noiseM * TERRAIN_EXIT_SIGMA;
+      if (d.exitM > d.stepEnterM * 0.5) d.exitM = d.stepEnterM * 0.5;
+#else
+      // 고정값을 그대로 쓴다. 기준거리만 실측으로 잡는다.
+      d.stepEnterM = STEP_ENTER_FIXED_M;
+      d.stepDangerM = STEP_DANGER_FIXED_M;
+      d.holeEnterM = HOLE_ENTER_FIXED_M;
+      d.exitM = TERRAIN_EXIT_FIXED_M;
+#endif
+
+      // 보정 구간이 이미 심하게 흔들렸다면 기준거리도 임계값도 믿을 게 못
+      // 된다. 측정을 먼저 봐야 하므로 알려 준다.
+      if (d.noiseM > US_BASELINE_MAX_NOISE_M) {
+        Serial.print(F("E,US_NOISY,"));
+        Serial.print(index);
+        Serial.print(',');
+        Serial.println((int)(d.noiseM * 1000.0));
       }
     }
     return;  // 보정이 끝날 때까지는 판정하지 않는다
@@ -1206,7 +1447,20 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
 
   switch (d.state) {
     case TERRAIN_IDLE:
-      if (dev > HOLE_ENTER_M) {
+      // 같은 방향이 연속으로 보여야 상태를 바꾼다. 발처럼 빔에 걸쳤다
+      // 빠졌다 하는 것이 한 프레임씩 튀며 턱과 홈을 번갈아 만드는 것을 막는다.
+      if (dev > d.holeEnterM) {
+        if (d.holeVotes < 255) d.holeVotes++;
+        d.stepVotes = 0;
+      } else if (-dev > d.stepEnterM) {
+        if (d.stepVotes < 255) d.stepVotes++;
+        d.holeVotes = 0;
+      } else {
+        d.holeVotes = 0;
+        d.stepVotes = 0;
+      }
+
+      if (d.holeVotes >= TERRAIN_CONFIRM_FRAMES) {
         // 빔 띠가 safe_gap보다 길어서, 보이기 시작한 홈은 이미 바퀴가
         // 빠지는 크기다. 바로 알린다.
         d.state = TERRAIN_HOLE;
@@ -1216,17 +1470,19 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
         hazard = HAZARD_HOLE;
         eventWidthM = d.holeWidthM;
         eventDepthM = d.holeDepthM;
-      } else if (-dev > STEP_ENTER_M) {
+        d.holeVotes = 0;
+      } else if (d.stepVotes >= TERRAIN_CONFIRM_FRAMES) {
         // 턱일 수도, 경사로 진입일 수도 있다. 크기를 보고 정한다.
         d.state = TERRAIN_STEP;
         d.stepPeakM = -dev;
+        d.stepVotes = 0;
       }
       break;
 
     case TERRAIN_HOLE:
       d.holeWidthM += currentSpeedMps() * interval;   // 앱에 보낼 참고값
       if (dev > d.holeDepthM) d.holeDepthM = dev;
-      if (dev < TERRAIN_EXIT_M) {                     // 노면 복귀
+      if (dev < d.exitM) {                            // 노면 복귀
         d.state = TERRAIN_IDLE;
         d.holeWidthM = 0.0;
         d.holeDepthM = 0.0;
@@ -1235,13 +1491,13 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
 
     case TERRAIN_STEP:
       if (-dev > d.stepPeakM) d.stepPeakM = -dev;
-      if (d.stepPeakM >= STEP_DANGER_M) {
+      if (d.stepPeakM >= d.stepDangerM) {
         risk = RISK_DANGER;
         hazard = HAZARD_STEP;
         eventDepthM = d.stepPeakM;                    // 턱 높이
         d.state = TERRAIN_IDLE;
         d.stepPeakM = 0.0;
-      } else if (-dev < TERRAIN_EXIT_M) {
+      } else if (-dev < d.exitM) {
         // 노면이 돌아왔고 크기가 작았다 = 경사로 진입이나 잔요철
         d.state = TERRAIN_IDLE;
         d.stepPeakM = 0.0;
@@ -1251,12 +1507,16 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
 
   // 한 프레임짜리 판정이라 그대로 두면 텔레메트리에서 놓친다.
   // 더 높은 위험이면 갱신하고, 같은 위험이면 유지시간만 늘린다.
-  if (risk >= d.risk) {
+  if (risk > d.risk) {
     d.risk = risk;
     d.hazard = hazard;
     d.riskAtMs = now;
     d.riskWidthM = eventWidthM;
     d.riskDepthM = eventDepthM;
+  } else if (risk != RISK_SAFE && risk == d.risk) {
+    // 같은 등급이면 유지시간만 늘리고 원인은 그대로 둔다. 빔에 걸친 물체가
+    // 턱과 홈을 오갈 때 앱으로 나가는 원인이 계속 뒤집히는 것을 막는다.
+    d.riskAtMs = now;
   }
 }
 

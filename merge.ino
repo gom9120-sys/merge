@@ -364,6 +364,20 @@ const float US_GROUND_MAX_RATIO = 3.00;
 //   현장마다 다시 맞출 필요가 없어진다.
 // 잡음이 비정상적으로 작게(또는 크게) 잡히는 경우를 막으려고 하한과 상한을
 // 함께 둔다.
+// 임계값을 어디서 얻을지 고르는 스위치.
+//   1 = 부팅 보정에서 잰 잡음의 배수로 만든다(기본). 센서 개체차나 노면
+//       재질이 달라도 따라가지만, 시동할 때 평지에 있어야 한다.
+//   0 = 아래 고정값을 그대로 쓴다. 보정은 기준거리만 잡는다. 시동 위치를
+//       평지로 잡기 어렵거나 임계값을 손으로 못 박고 싶을 때.
+// merge_idle/merge_idle.ino 가 이 스위치를 0으로 둔 같은 코드다.
+#define TERRAIN_THRESHOLD_FROM_CALIBRATION 1
+
+// 스위치가 0일 때 쓰는 고정 임계값.
+const float STEP_ENTER_FIXED_M = 0.020;
+const float STEP_DANGER_FIXED_M = 0.040;
+const float HOLE_ENTER_FIXED_M = 0.040;
+const float TERRAIN_EXIT_FIXED_M = 0.010;
+
 const float STEP_ENTER_SIGMA = 4.0;    // 턱 판정 시작 = 잡음의 몇 배
 const float STEP_DANGER_SIGMA = 8.0;   // 턱 확정
 const float HOLE_ENTER_SIGMA = 4.0;    // 홈 판정 시작
@@ -1345,21 +1359,24 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
       if (effSin < 0.05) effSin = 0.05;
       usHeightGainM[index] = effSin;
 
-      // 잡음을 노면 높이로 환산하고, 임계값을 그 배수로 만든다.
+      // 잡음을 노면 높이로 환산한다. 임계값 산출과 별개로 기록해 둔다.
       d.noiseM = sqrt(var) * usHeightGainM[index];
+
+#if TERRAIN_THRESHOLD_FROM_CALIBRATION
+      // 임계값을 잡음의 배수로 만든다.
       d.stepEnterM = d.noiseM * STEP_ENTER_SIGMA;
       d.stepDangerM = d.noiseM * STEP_DANGER_SIGMA;
       d.holeEnterM = d.noiseM * HOLE_ENTER_SIGMA;
 
       if (d.stepEnterM < STEP_ENTER_FLOOR_M) d.stepEnterM = STEP_ENTER_FLOOR_M;
       if (d.stepDangerM < STEP_DANGER_FLOOR_M) d.stepDangerM = STEP_DANGER_FLOOR_M;
+      if (d.holeEnterM < HOLE_ENTER_FLOOR_M) d.holeEnterM = HOLE_ENTER_FLOOR_M;
 
       // 경사로 진입이 만드는 겉보기 턱보다는 위에 둬야 한다.
       float rampFloor = usLookAheadM[index]
                         * tan(RAMP_MAX_DEG * PI / 180.0)
                         * STEP_DANGER_RAMP_MARGIN;
       if (d.stepDangerM < rampFloor) d.stepDangerM = rampFloor;
-      if (d.holeEnterM < HOLE_ENTER_FLOOR_M) d.holeEnterM = HOLE_ENTER_FLOOR_M;
 
       // 홈은 기하 상한 위로 올려서 '뜨면 빔 띠보다 넓은 홈'을 보장한다.
       float capFloor = usJumpCapM[index] * HOLE_ENTER_CAP_MARGIN;
@@ -1372,6 +1389,13 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
 
       d.exitM = d.noiseM * TERRAIN_EXIT_SIGMA;
       if (d.exitM > d.stepEnterM * 0.5) d.exitM = d.stepEnterM * 0.5;
+#else
+      // 고정값을 그대로 쓴다. 기준거리만 실측으로 잡는다.
+      d.stepEnterM = STEP_ENTER_FIXED_M;
+      d.stepDangerM = STEP_DANGER_FIXED_M;
+      d.holeEnterM = HOLE_ENTER_FIXED_M;
+      d.exitM = TERRAIN_EXIT_FIXED_M;
+#endif
 
       // 보정 구간이 이미 심하게 흔들렸다면 기준거리도 임계값도 믿을 게 못
       // 된다. 측정을 먼저 봐야 하므로 알려 준다.
