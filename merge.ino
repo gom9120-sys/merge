@@ -152,6 +152,9 @@
 //   E,US_BEAM,<센서>,<빔길이mm>,<전방주시mm>  센서별 빔 기하 (부팅 시 3줄)
 //   E,US_CAL,<센서>,<기준거리>,<잡음>,<턱시작>,<턱확정>,<홈시작>  단위 mm
 //                          부팅 보정이 끝나면 센서별로 1줄씩 (총 3줄)
+//   E,US_ODD,<센서>,<실측mm>,<계산mm>  평지가 아닌 것을 보고 있다.
+//                          보정을 버리고 다시 잰다. 그 센서는 이 줄이 멈추고
+//                          E,US_CAL이 나올 때까지 판정에 참여하지 않는다.
 //
 // US_RAW_DEBUG를 1로 두면 진단용 줄이 추가로 나간다 (기본 0).
 //   R,<센서>,<원시mm>,<중앙값mm>,<편차mm>,<에코us>,<실패원인>  매 측정마다
@@ -401,9 +404,22 @@ const float HOLE_SAFE_GAP_M = HOLE_SAFE_GAP_RATIO * WHEEL_WIDTH_M;
 // 타이어 공기압이나 장착 오차로 실제 높이가 조금 달라도 흡수된다. 평균이
 // 계산값과 너무 다르면(위험 지형 위에서 켠 경우) 계산값을 그대로 쓴다.
 const uint8_t US_BASELINE_SAMPLES = 20;
-const float US_BASELINE_MIN_RATIO = 0.7;
-const float US_BASELINE_MAX_RATIO = 1.4;
+// 보정에서 잰 기준거리가 계산값에서 이 비율 밖으로 벗어나면 평지를 보고
+// 있는 것이 아니다. 45도 센서는 앞을 보기 때문에 앞에 책상이나 벽이 있으면
+// 그 거리가 잡힌다(실측에서 202mm 기대에 418mm가 나온 적이 있다).
+//
+// 이때 계산값으로 슬쩍 되돌리면 안 된다. 센서는 계속 책상을 보는데 기준만
+// 노면 값이 되어, 편차가 영원히 크게 남고 조금만 흔들려도 턱과 홈이 번갈아
+// 뜬다. 그래서 보정을 받아들이지 않고 처음부터 다시 잰다. 그 센서는 평지가
+// 잡힐 때까지 판정에 참여하지 않는다.
+const float US_BASELINE_MIN_RATIO = 0.6;
+const float US_BASELINE_MAX_RATIO = 1.6;
 const float US_BASELINE_MAX_NOISE_M = 0.015;  // 이보다 흔들리면 경고한다
+
+// 판정 상태를 바꾸기 전에 같은 방향이 몇 프레임 연속으로 보여야 하는지.
+// 발이나 사람처럼 빔에 걸쳤다 빠졌다 하는 것이 한 프레임씩 튀면서 턱과 홈을
+// 번갈아 만들어내는 것을 막는다. 1로 두면 예전처럼 한 프레임에 바로 판정한다.
+const uint8_t TERRAIN_CONFIRM_FRAMES = 2;
 
 // 측정 주기
 //   센서 하나가 다시 측정될 때까지의 시간은 US_PING_INTERVAL_MS * US_COUNT,
@@ -543,6 +559,8 @@ struct DangerDetector {
   float holeWidthM;        // 홈 상태에서 누적한 너비 (참고값)
   float holeDepthM;        // 홈의 최대 깊이
   float stepPeakM;         // 턱 상태에서 본 최대 높이
+  uint8_t holeVotes;       // 같은 방향이 연속으로 보인 프레임 수
+  uint8_t stepVotes;
   unsigned long lastSampleAtMs;
   uint16_t recentMm[3];    // 중앙값 필터용 최근 유효 측정
   uint8_t recentCount;
@@ -620,7 +638,8 @@ float usSinTilt[US_COUNT];
 float usExpectedFlatM[US_COUNT];
 float usBeamFootprintM[US_COUNT];  // 빔이 노면에 그리는 띠의 길이
 float usLookAheadM[US_COUNT];      // 센서 바로 아래에서 빔 중심까지의 거리
-float usBaselineM[US_COUNT];       // 평지에서 나오는 기준 거리 d0
+float usBaselineM[US_COUNT];       // 평지에서 나오는 기준 거리 d0 (실측)
+float usBaselineComputedM[US_COUNT];  // 설치값에서 계산한 기준 거리
 float usHeightGainM[US_COUNT];     // 거리 편차 -> 노면 높이 변화 계수 k
 float usJumpCapM[US_COUNT];        // 빔 띠보다 좁은 홈이 만드는 편차의 상한
 
@@ -1149,6 +1168,7 @@ void setupTerrainDetectors() {
     float nearSin = sin(nearDeg * PI / 180.0);
     if (nearSin < US_MIN_TILT_SIN) nearSin = US_MIN_TILT_SIN;
     usBaselineM[i] = US_MOUNT_HEIGHT_M[i] / nearSin;
+    usBaselineComputedM[i] = usBaselineM[i];
     usHeightGainM[i] = nearSin;
 
     // 빔 띠보다 좁은 홈이 만드는 편차의 상한. 빔의 가장 가까운 광선이 홈에
@@ -1172,6 +1192,8 @@ void resetDetector(uint8_t index) {
   d.holeWidthM = 0.0;
   d.holeDepthM = 0.0;
   d.stepPeakM = 0.0;
+  d.holeVotes = 0;
+  d.stepVotes = 0;
   d.pendingIntervalS = 0.0;
   d.recentCount = 0;
   d.recentMm[0] = d.recentMm[1] = d.recentMm[2] = 0;
@@ -1294,12 +1316,34 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
       float var = d.baselineSumSqM / US_BASELINE_SAMPLES - mean * mean;
       if (var < 0.0) var = 0.0;
 
-      float computed = US_MOUNT_HEIGHT_M[index] / usHeightGainM[index];
-      // 위험 지형 위에서 켠 경우를 걸러낸다. 너무 다르면 계산값을 쓴다.
-      if (mean > computed * US_BASELINE_MIN_RATIO
-          && mean < computed * US_BASELINE_MAX_RATIO) {
-        usBaselineM[index] = mean;
+      float lo = usBaselineComputedM[index] * US_BASELINE_MIN_RATIO;
+      float hi = usBaselineComputedM[index] * US_BASELINE_MAX_RATIO;
+
+      if (mean < lo || mean > hi) {
+        // 평지가 아니다. 앞에 물체가 있거나 장착이 설정과 다르다.
+        // 받아들이지 말고 처음부터 다시 잰다.
+        Serial.print(F("E,US_ODD,"));
+        Serial.print(index);
+        Serial.print(',');
+        Serial.print((int)(mean * 1000.0));
+        Serial.print(',');
+        Serial.println((int)(usBaselineComputedM[index] * 1000.0));
+        d.baselineSumM = 0.0;
+        d.baselineSumSqM = 0.0;
+        d.baselineCount = 0;
+        return;
       }
+
+      usBaselineM[index] = mean;
+
+      // 실측 기준거리에서 빔이 실제로 노면을 보는 각도를 역산한다.
+      //     sin(유효각) = 설치높이 / 실측 기준거리
+      // 거리 편차를 노면 높이로 바꾸는 계수가 이 각도에 걸려 있어서,
+      // 장착 오차만큼 계산값을 그대로 쓰면 편차가 부풀거나 줄어든다.
+      float effSin = US_MOUNT_HEIGHT_M[index] / mean;
+      if (effSin > 1.0) effSin = 1.0;
+      if (effSin < 0.05) effSin = 0.05;
+      usHeightGainM[index] = effSin;
 
       // 잡음을 노면 높이로 환산하고, 임계값을 그 배수로 만든다.
       d.noiseM = sqrt(var) * usHeightGainM[index];
@@ -1348,7 +1392,20 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
 
   switch (d.state) {
     case TERRAIN_IDLE:
+      // 같은 방향이 연속으로 보여야 상태를 바꾼다. 발처럼 빔에 걸쳤다
+      // 빠졌다 하는 것이 한 프레임씩 튀며 턱과 홈을 번갈아 만드는 것을 막는다.
       if (dev > d.holeEnterM) {
+        if (d.holeVotes < 255) d.holeVotes++;
+        d.stepVotes = 0;
+      } else if (-dev > d.stepEnterM) {
+        if (d.stepVotes < 255) d.stepVotes++;
+        d.holeVotes = 0;
+      } else {
+        d.holeVotes = 0;
+        d.stepVotes = 0;
+      }
+
+      if (d.holeVotes >= TERRAIN_CONFIRM_FRAMES) {
         // 빔 띠가 safe_gap보다 길어서, 보이기 시작한 홈은 이미 바퀴가
         // 빠지는 크기다. 바로 알린다.
         d.state = TERRAIN_HOLE;
@@ -1358,10 +1415,12 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
         hazard = HAZARD_HOLE;
         eventWidthM = d.holeWidthM;
         eventDepthM = d.holeDepthM;
-      } else if (-dev > d.stepEnterM) {
+        d.holeVotes = 0;
+      } else if (d.stepVotes >= TERRAIN_CONFIRM_FRAMES) {
         // 턱일 수도, 경사로 진입일 수도 있다. 크기를 보고 정한다.
         d.state = TERRAIN_STEP;
         d.stepPeakM = -dev;
+        d.stepVotes = 0;
       }
       break;
 
@@ -1393,12 +1452,16 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
 
   // 한 프레임짜리 판정이라 그대로 두면 텔레메트리에서 놓친다.
   // 더 높은 위험이면 갱신하고, 같은 위험이면 유지시간만 늘린다.
-  if (risk >= d.risk) {
+  if (risk > d.risk) {
     d.risk = risk;
     d.hazard = hazard;
     d.riskAtMs = now;
     d.riskWidthM = eventWidthM;
     d.riskDepthM = eventDepthM;
+  } else if (risk != RISK_SAFE && risk == d.risk) {
+    // 같은 등급이면 유지시간만 늘리고 원인은 그대로 둔다. 빔에 걸친 물체가
+    // 턱과 홈을 오갈 때 앱으로 나가는 원인이 계속 뒤집히는 것을 막는다.
+    d.riskAtMs = now;
   }
 }
 
