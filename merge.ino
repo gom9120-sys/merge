@@ -154,7 +154,7 @@
 //                          부팅 보정이 끝나면 센서별로 1줄씩 (총 3줄)
 //
 // US_RAW_DEBUG를 1로 두면 진단용 줄이 추가로 나간다 (기본 0).
-//   R,<센서>,<원시mm>,<중앙값mm>,<편차mm>   매 측정마다
+//   R,<센서>,<원시mm>,<중앙값mm>,<편차mm>,<에코us>,<실패원인>  매 측정마다
 //
 // HUMAN_READABLE_LOG를 1로 바꾸면 '#'로 시작하는 사람이 읽는 줄이 하나 더
 // 나간다(기본 0, 현장 확인용). 아래 파서는 어차피 무시한다.
@@ -231,7 +231,8 @@
 
 // 진단용. 1로 두면 US_RAW_DEBUG_SENSOR 번 센서의 측정을 매 프레임 그대로
 // 내보낸다. 가만히 서 있는데 경보가 뜨거나, 거리값이 튀는 것 같을 때 쓴다.
-//     R,<센서>,<원시mm>,<중앙값mm>,<편차mm>
+//     R,<센서>,<원시mm>,<중앙값mm>,<편차mm>,<에코us>,<실패원인>
+//   실패원인 0=정상 1=에코 안 올라옴(배선/전원) 2=에코 안 내려옴 3=범위 밖
 // 편차는 평지 기준거리 대비 노면 높이 변화다(+ 홈 / - 턱). 서 있으면 이 값이
 // 0 근처에 머물러야 한다. 두 값 사이를 규칙적으로 오가면 센서 간 크로스토크,
 // 불규칙하게 튀면 반향이 약한 것이다.
@@ -293,7 +294,10 @@ const unsigned long BELT_DEBOUNCE_MS = 50;
 
 // ===================== 초음파 측정값 =====================
 const unsigned long US_PING_INTERVAL_MS = 15;    // 센서 간 간격 -> 센서당 45ms
-const unsigned long US_RISE_TIMEOUT_US = 1500;   // 에코 상승 대기 한계
+// 트리거 후 에코가 올라오기를 기다리는 한계. 정품 HC-SR04는 0.5ms 안에
+// 올리지만 클론 중에는 더 걸리는 것이 있어 넉넉히 잡는다. 이 시간을 넘기면
+// '센서 응답 없음'(거리 0)이 된다 -- 배선이나 전원이 끊겼을 때의 증상이다.
+const unsigned long US_RISE_TIMEOUT_US = 3000;   // 에코 상승 대기 한계
 const unsigned long US_MAX_ECHO_US = 6000;       // 약 1 m 왕복
 const uint16_t US_MIN_VALID_MM = 20;             // HC-SR04 최소 측정 거리
 const uint16_t US_MAX_VALID_MM = 1000;           // 노면용으로 좁힌 상한
@@ -604,6 +608,12 @@ UsPhase usPhase = US_IDLE;
 uint8_t usIndex = 0;
 unsigned long usPingStartedAtMs = 0;
 uint16_t usDistanceMm[US_COUNT] = { 0, 0, 0 };
+
+// 진단용. 마지막 측정의 에코 길이(us)와 실패 원인.
+//   0 = 정상, 1 = 에코가 안 올라옴(배선/전원 의심), 2 = 에코가 안 내려옴,
+//   3 = 거리 범위 밖
+uint16_t usLastPulseUs[US_COUNT] = { 0, 0, 0 };
+uint8_t usLastFail[US_COUNT] = { 0, 0, 0 };
 
 // 설치 각도/높이에서 미리 계산해 두는 값.
 float usSinTilt[US_COUNT];
@@ -1061,6 +1071,8 @@ void updateUltrasonic(unsigned long now) {
   while (digitalRead(echoPin) == LOW) {
     if (micros() - trigAt > US_RISE_TIMEOUT_US) {
       usDistanceMm[usIndex] = 0;  // 센서 응답 없음
+      usLastPulseUs[usIndex] = 0;
+      usLastFail[usIndex] = 1;
       finishPing();
       return;
     }
@@ -1069,13 +1081,18 @@ void updateUltrasonic(unsigned long now) {
   unsigned long echoStart = micros();
   while (digitalRead(echoPin) == HIGH) {
     if (micros() - echoStart > US_MAX_ECHO_US) {
-      usDistanceMm[usIndex] = 0;  // 측정 범위 밖
+      usDistanceMm[usIndex] = 0;  // 에코가 내려오지 않음
+      usLastPulseUs[usIndex] = US_MAX_ECHO_US;
+      usLastFail[usIndex] = 2;
       finishPing();
       return;
     }
   }
 
-  usDistanceMm[usIndex] = pulseToMm(micros() - echoStart);
+  unsigned long pulseUs = micros() - echoStart;
+  usLastPulseUs[usIndex] = (pulseUs > 65000) ? 65000 : (uint16_t)pulseUs;
+  usDistanceMm[usIndex] = pulseToMm(pulseUs);
+  usLastFail[usIndex] = (usDistanceMm[usIndex] == 0) ? 3 : 0;
   finishPing();
 }
 
@@ -1244,8 +1261,12 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
     Serial.print(',');
     Serial.print(distanceMm);
     Serial.print(',');
-    if (isnan(dev)) Serial.println(F("NA"));
-    else Serial.println((int)(dev * 1000.0));
+    if (isnan(dev)) Serial.print(F("NA"));
+    else Serial.print((int)(dev * 1000.0));
+    Serial.print(',');
+    Serial.print(usLastPulseUs[index]);
+    Serial.print(',');
+    Serial.println(usLastFail[index]);
   }
 #endif
 
