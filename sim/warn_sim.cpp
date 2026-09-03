@@ -285,8 +285,8 @@ static bool runWarn(const Scenario &sc, double speed, double *warnM) {
 }
 
 int main() {
-  const char *names[] = { "curb_6cm", "curb_10cm", "dropoff", "hole_8cm" };
-  double (*hs[])(double) = { h_curb_6cm, h_curb_up, h_dropoff, h_hole_wide };
+  const char *names[] = { "curb_6cm", "curb_10cm", "dropoff", "hole_5cm", "hole_8cm" };
+  double (*hs[])(double) = { h_curb_6cm, h_curb_up, h_dropoff, h_hole_5cm, h_hole_wide };
   double speeds[] = { 0.3, 0.4, 0.5 };
   const int TRIALS = 40;
 
@@ -295,7 +295,7 @@ int main() {
          US_MOUNT_HEIGHT_M[0], US_TILT_DEG[0],
          usBeamFootprintM[0] * 1000.0, usLookAheadM[0] * 1000.0);
   double allSum = 0; int allN = 0, allDet = 0, allRun = 0, allLate = 0;
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 5; i++) {
     Scenario sc = { names[i], hs[i], 2.0, RISK_DANGER, RISK_DANGER, 0 };
     double sum = 0, worst = 1e9; int det = 0, run = 0, late = 0;
     for (int si = 0; si < 3; si++) for (int t = 0; t < TRIALS; t++) {
