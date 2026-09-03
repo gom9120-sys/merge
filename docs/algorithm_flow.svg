@@ -1,0 +1,262 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1290 1700" width="1290" height="1700">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a94a3"/></marker></defs>
+<rect width="1290" height="1700" fill="#ffffff"/>
+<text x="28" y="42" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="22" font-weight="700" fill="#1c232e" text-anchor="start">초음파 센싱 알고리즘 구조도</text>
+<text x="28" y="63" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="12.5" font-weight="400" fill="#7b8697" text-anchor="start">merge.ino  ·  절대 기준거리 방식  ·  센서 3개 (좌 65° / 중앙 45° / 우 65°)</text>
+<rect x="24" y="88" width="950" height="178" rx="5" fill="none" stroke="#2f6f8f" stroke-width="1.6"/>
+<rect x="38" y="77" width="262" height="22" rx="3" fill="#ffffff"/>
+<text x="49" y="93" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="13.5" font-weight="700" fill="#2f6f8f" text-anchor="start">1. 초음파 측정 루프 (라운드로빈)</text>
+<rect x="44" y="122" width="138" height="66" rx="3" fill="#eef4f8" stroke="#2f6f8f" stroke-width="1.4"/>
+<text x="113.0" y="144.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">센서 i 선택</text>
+<text x="113.0" y="158.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">좌 / 중 / 우</text>
+<text x="113.0" y="172.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">순환</text>
+<rect x="197" y="122" width="138" height="66" rx="3" fill="#eef4f8" stroke="#2f6f8f" stroke-width="1.4"/>
+<text x="266.0" y="151.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">초음파 트리거</text>
+<text x="266.0" y="165.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">10 µs HIGH</text>
+<line x1="182" y1="155.0" x2="195" y2="155.0" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="350" y="122" width="138" height="66" rx="3" fill="#eef4f8" stroke="#2f6f8f" stroke-width="1.4"/>
+<text x="419.0" y="144.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">에코 수신</text>
+<text x="419.0" y="158.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">그 자리에서</text>
+<text x="419.0" y="172.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">끝까지 측정</text>
+<line x1="335" y1="155.0" x2="348" y2="155.0" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="503" y="122" width="138" height="66" rx="3" fill="#eef4f8" stroke="#2f6f8f" stroke-width="1.4"/>
+<text x="572.0" y="144.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">거리 계산</text>
+<text x="572.0" y="158.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">raw = 시간 ×</text>
+<text x="572.0" y="172.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">0.343 / 2 (mm)</text>
+<line x1="488" y1="155.0" x2="501" y2="155.0" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="656" y="122" width="138" height="66" rx="3" fill="#eef4f8" stroke="#2f6f8f" stroke-width="1.4"/>
+<text x="725.0" y="144.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">3점 중앙값</text>
+<text x="725.0" y="158.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">한 프레임짜리</text>
+<text x="725.0" y="172.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">헛에코 제거</text>
+<line x1="641" y1="155.0" x2="654" y2="155.0" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="809" y="122" width="138" height="66" rx="3" fill="#eef4f8" stroke="#2f6f8f" stroke-width="1.4"/>
+<text x="878.0" y="144.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">편차 계산</text>
+<text x="878.0" y="158.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">dev =</text>
+<text x="878.0" y="172.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">(d − d0) × k</text>
+<line x1="794" y1="155.0" x2="807" y2="155.0" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<polyline points="878.0,188 878.0,210 113.0,210 113.0,190" fill="none" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="499.0" y="228" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="middle">US_PING_INTERVAL_MS(15 ms) 간격으로 순환 — 센서당 45 ms</text>
+<polyline points="499.0,266 499.0,292" fill="none" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="24" y="300" width="950" height="1090" rx="5" fill="none" stroke="#2f6f8f" stroke-width="1.6"/>
+<rect x="38" y="289" width="370" height="22" rx="3" fill="#ffffff"/>
+<text x="49" y="305" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="13.5" font-weight="700" fill="#2f6f8f" text-anchor="start">2. 한 센서의 판정 흐름 (새 측정마다 한 프레임)</text>
+<rect x="95" y="332" width="210" height="44" rx="3" fill="#eef4f8" stroke="#2f6f8f" stroke-width="1.4"/>
+<text x="200.0" y="350.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">새 측정 도착</text>
+<text x="200.0" y="364.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">(편차 dev, 시각 now)</text>
+<line x1="200" y1="376" x2="200" y2="396" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<polygon points="200,395.0 305.0,426 200,457.0 95.0,426" fill="#fdf4e0" stroke="#b8862b" stroke-width="1.4"/>
+<text x="200" y="423.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">측정 실패인가?</text>
+<text x="200" y="437.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">(에코 없음 · 범위 밖)</text>
+<rect x="360" y="400" width="236" height="54" rx="3" fill="#f5f7f4" stroke="#9aab9f" stroke-width="1.4"/>
+<text x="478.0" y="416.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.0" font-weight="700" fill="#1c232e" text-anchor="middle">판정 없음</text>
+<text x="478.0" y="430.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">상태와 중앙값 버퍼는 그대로 두고</text>
+<text x="478.0" y="444.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">놓친 시간만 다음 프레임에 넘긴다</text>
+<line x1="305" y1="426" x2="358" y2="426" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="330" y="420" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#4d5766" text-anchor="middle">예</text>
+<line x1="200" y1="457" x2="200" y2="480" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="174" y="474" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#4d5766" text-anchor="middle">아니오</text>
+<polygon points="200,481.0 305.0,512 200,543.0 95.0,512" fill="#fdf4e0" stroke="#b8862b" stroke-width="1.4"/>
+<text x="200" y="509.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">보정이 끝났는가?</text>
+<text x="200" y="523.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">(유효 20프레임)</text>
+<rect x="360" y="480" width="236" height="70" rx="3" fill="#f5f7f4" stroke="#9aab9f" stroke-width="1.4"/>
+<text x="478.0" y="497.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.0" font-weight="700" fill="#1c232e" text-anchor="middle">보정 중</text>
+<text x="478.0" y="511.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">기준거리 d0와 잡음 σ 누적</text>
+<text x="478.0" y="525.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">창(0.6~1.6×) 밖이면 버리고 재시작</text>
+<text x="478.0" y="539.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">E,US_ODD — 그 센서는 판정 제외</text>
+<line x1="305" y1="512" x2="358" y2="512" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="332" y="506" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#4d5766" text-anchor="middle">아니오</text>
+<line x1="200" y1="543" x2="200" y2="566" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="182" y="560" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#4d5766" text-anchor="middle">예</text>
+<polygon points="200,567.0 305.0,598 200,629.0 95.0,598" fill="#fdf4e0" stroke="#b8862b" stroke-width="1.4"/>
+<text x="200" y="595.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">측정 간격 &gt; 0.25 s?</text>
+<text x="200" y="609.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">(오래 끊겼는가)</text>
+<rect x="360" y="574" width="236" height="48" rx="3" fill="#f5f7f4" stroke="#9aab9f" stroke-width="1.4"/>
+<text x="478.0" y="594.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.0" font-weight="700" fill="#1c232e" text-anchor="middle">연속성 끊김</text>
+<text x="478.0" y="608.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">상태 · 표 · 버퍼 초기화 후 진행</text>
+<line x1="305" y1="598" x2="358" y2="598" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="330" y="592" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#4d5766" text-anchor="middle">예</text>
+<line x1="200" y1="629" x2="200" y2="652" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="174" y="646" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#4d5766" text-anchor="middle">아니오</text>
+<rect x="70" y="654" width="260" height="40" rx="3" fill="#e9eff5" stroke="#48606f" stroke-width="1.4"/>
+<text x="200.0" y="677.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">현재 상태에 따라 분기 (센서마다 독립)</text>
+<rect x="44" y="724" width="296" height="646" rx="4" fill="#eaf3ed" stroke="#3a7357" stroke-width="1.3" opacity="0.55"/>
+<text x="192.0" y="750" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="15" font-weight="700" fill="#1c232e" text-anchor="middle">IDLE</text>
+<text x="192.0" y="768" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#4d5766" text-anchor="middle">평지 — 방향을 세는 중</text>
+<rect x="351" y="724" width="296" height="646" rx="4" fill="#fbeae7" stroke="#b1443a" stroke-width="1.3" opacity="0.55"/>
+<text x="499.0" y="750" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="15" font-weight="700" fill="#1c232e" text-anchor="middle">HOLE</text>
+<text x="499.0" y="768" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#4d5766" text-anchor="middle">홈을 지나는 중</text>
+<polyline points="499.0,694 499.0,722" fill="none" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="658" y="724" width="296" height="646" rx="4" fill="#f2eef8" stroke="#6b52a3" stroke-width="1.3" opacity="0.55"/>
+<text x="806.0" y="750" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="15" font-weight="700" fill="#1c232e" text-anchor="middle">STEP</text>
+<text x="806.0" y="768" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#4d5766" text-anchor="middle">노면이 올라옴 — 턱인지 경사로인지</text>
+<polyline points="806.0,694 806.0,722" fill="none" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<polyline points="192.0,694 192.0,722" fill="none" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="72" y="782" width="240" height="76" rx="3" fill="#ffffff" stroke="#3a7357" stroke-width="1.4"/>
+<text x="192.0" y="801.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">편차 방향으로 표를 센다</text>
+<text x="192.0" y="816.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">dev &gt; 홈시작 → 홈 표 +1</text>
+<text x="192.0" y="831.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">−dev &gt; 턱시작 → 턱 표 +1</text>
+<text x="192.0" y="846.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">그 외 → 두 표 모두 0</text>
+<line x1="192.0" y1="858" x2="192.0" y2="876" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<polygon points="192.0,878.0 282.0,906 192.0,934.0 102.0,906" fill="#fdf4e0" stroke="#b8862b" stroke-width="1.4"/>
+<text x="192.0" y="910.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">홈 표 ≥ 2 프레임?</text>
+<line x1="192.0" y1="934" x2="192.0" y2="952" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="176.0" y="948" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#4d5766" text-anchor="middle">예</text>
+<rect x="72" y="954" width="240" height="78" rx="3" fill="#fbeae7" stroke="#b1443a" stroke-width="1.4"/>
+<text x="192.0" y="974.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">홈 진입</text>
+<text x="192.0" y="989.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">state = HOLE</text>
+<text x="192.0" y="1004.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">depth = dev,  width = 빔 띠</text>
+<text x="192.0" y="1019.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">→ 즉시 DANGER · HOLE</text>
+<text x="288.0" y="900" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#4d5766" text-anchor="start">아니오</text>
+<polyline points="282.0,906 326,906 326,1064 196.0,1064 196.0,1080" fill="none" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<polygon points="192.0,1082.0 282.0,1110 192.0,1138.0 102.0,1110" fill="#fdf4e0" stroke="#b8862b" stroke-width="1.4"/>
+<text x="192.0" y="1114.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">턱 표 ≥ 2 프레임?</text>
+<line x1="192.0" y1="1138" x2="192.0" y2="1156" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="176.0" y="1152" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#4d5766" text-anchor="middle">예</text>
+<rect x="72" y="1158" width="240" height="62" rx="3" fill="#f2eef8" stroke="#6b52a3" stroke-width="1.4"/>
+<text x="192.0" y="1177.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">턱 후보 진입</text>
+<text x="192.0" y="1192.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">state = STEP</text>
+<text x="192.0" y="1207.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">peak = −dev</text>
+<text x="96.0" y="1104" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#4d5766" text-anchor="end">아니오</text>
+<polyline points="102.0,1110 58,1110 58,1254 188.0,1254 188.0,1270" fill="none" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="72" y="1272" width="240" height="44" rx="3" fill="#ffffff" stroke="#3a7357" stroke-width="1.4"/>
+<text x="192.0" y="1297.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">표만 갱신하고 끝 → SAFE</text>
+<rect x="379" y="782" width="240" height="62" rx="3" fill="#ffffff" stroke="#b1443a" stroke-width="1.4"/>
+<text x="499.0" y="802.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.0" font-weight="700" fill="#1c232e" text-anchor="middle">너비 적분</text>
+<text x="499.0" y="816.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">width += 속도 × Δt</text>
+<text x="499.0" y="830.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">(앱에 보낼 참고값 · 판정엔 미사용)</text>
+<line x1="499.0" y1="844" x2="499.0" y2="862" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="379" y="864" width="240" height="44" rx="3" fill="#ffffff" stroke="#b1443a" stroke-width="1.4"/>
+<text x="499.0" y="889.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">depth = max(depth, dev)</text>
+<line x1="499.0" y1="908" x2="499.0" y2="926" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<polygon points="499.0,926.0 589.0,956 499.0,986.0 409.0,956" fill="#fdf4e0" stroke="#b8862b" stroke-width="1.4"/>
+<text x="499.0" y="953.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">노면이 돌아왔는가?</text>
+<text x="499.0" y="967.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">dev &lt; 복귀 임계</text>
+<line x1="499.0" y1="986" x2="499.0" y2="1006" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="483.0" y="1002" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#4d5766" text-anchor="middle">예</text>
+<rect x="379" y="1008" width="240" height="62" rx="3" fill="#eaf3ed" stroke="#3a7357" stroke-width="1.4"/>
+<text x="499.0" y="1027.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">홈 종료</text>
+<text x="499.0" y="1042.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">state = IDLE</text>
+<text x="499.0" y="1057.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">width · depth 지움</text>
+<text x="595.0" y="950" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#4d5766" text-anchor="start">아니오</text>
+<polyline points="589.0,956 633,956 633,1104 503.0,1104 503.0,1120" fill="none" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="379" y="1122" width="240" height="48" rx="3" fill="#ffffff" stroke="#b1443a" stroke-width="1.4"/>
+<text x="499.0" y="1149.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">계속 홈 안 → 이번 프레임 SAFE</text>
+<rect x="379" y="1194" width="240" height="84" rx="3" fill="#f5f7f4" stroke="#9aab9f" stroke-width="1.4"/>
+<text x="499.0" y="1209.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.0" font-weight="700" fill="#1c232e" text-anchor="middle">왜 진입 즉시 DANGER인가</text>
+<text x="499.0" y="1224.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">빔 띠(51~86 mm)가 이미 safe_gap</text>
+<text x="499.0" y="1239.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">(42 mm)보다 길다. 그래서 보이기</text>
+<text x="499.0" y="1254.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">시작한 홈은 정의상 바퀴가 빠지는</text>
+<text x="499.0" y="1269.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">크기 — 진입 시점에 DANGER 확정.</text>
+<rect x="686" y="782" width="240" height="62" rx="3" fill="#ffffff" stroke="#6b52a3" stroke-width="1.4"/>
+<text x="806.0" y="802.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.0" font-weight="700" fill="#1c232e" text-anchor="middle">최대 편차 추적</text>
+<text x="806.0" y="816.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">peak = max(peak, −dev)</text>
+<text x="806.0" y="830.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">(최대 상승량을 계속 추적)</text>
+<line x1="806.0" y1="844" x2="806.0" y2="862" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<polygon points="806.0,864.0 896.0,896 806.0,928.0 716.0,896" fill="#fdf4e0" stroke="#b8862b" stroke-width="1.4"/>
+<text x="806.0" y="893.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">peak ≥ 턱확정 임계?</text>
+<text x="806.0" y="907.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">(중앙 34 mm)</text>
+<line x1="806.0" y1="928" x2="806.0" y2="948" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="790.0" y="944" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#4d5766" text-anchor="middle">예</text>
+<rect x="686" y="950" width="240" height="78" rx="3" fill="#fbeae7" stroke="#b1443a" stroke-width="1.4"/>
+<text x="806.0" y="970.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">턱 확정</text>
+<text x="806.0" y="985.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">턱 높이 = peak</text>
+<text x="806.0" y="1000.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">state = IDLE</text>
+<text x="806.0" y="1015.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">→ DANGER · STEP</text>
+<text x="902.0" y="890" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#4d5766" text-anchor="start">아니오</text>
+<polyline points="896.0,896 940,896 940,1060 810.0,1060 810.0,1076" fill="none" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<polygon points="806.0,1080.0 896.0,1110 806.0,1140.0 716.0,1110" fill="#fdf4e0" stroke="#b8862b" stroke-width="1.4"/>
+<text x="806.0" y="1107.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">노면이 돌아왔는가?</text>
+<text x="806.0" y="1121.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#1c232e" text-anchor="middle">−dev &lt; 복귀 임계</text>
+<line x1="806.0" y1="1140" x2="806.0" y2="1160" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="790.0" y="1156" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#4d5766" text-anchor="middle">예</text>
+<rect x="686" y="1162" width="240" height="66" rx="3" fill="#eaf3ed" stroke="#3a7357" stroke-width="1.4"/>
+<text x="806.0" y="1183.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">경사로 · 잔요철</text>
+<text x="806.0" y="1198.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">턱이라 하기엔 너무 작았다</text>
+<text x="806.0" y="1213.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">state = IDLE → 경보 없음</text>
+<text x="710.0" y="1104" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#4d5766" text-anchor="end">아니오</text>
+<polyline points="716.0,1110 672,1110 672,1252 802.0,1252 802.0,1268" fill="none" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="686" y="1270" width="240" height="46" rx="3" fill="#ffffff" stroke="#6b52a3" stroke-width="1.4"/>
+<text x="806.0" y="1296.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">계속 추적 → 이번 프레임 SAFE</text>
+<rect x="24" y="1416" width="950" height="150" rx="5" fill="none" stroke="#2f6f8f" stroke-width="1.6"/>
+<rect x="38" y="1405" width="166" height="22" rx="3" fill="#ffffff"/>
+<text x="49" y="1421" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="13.5" font-weight="700" fill="#2f6f8f" text-anchor="start">3. 결과 처리와 출력</text>
+<rect x="46" y="1452" width="214" height="78" rx="3" fill="#e9eff5" stroke="#48606f" stroke-width="1.4"/>
+<text x="153.0" y="1479.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">위험 래치</text>
+<text x="153.0" y="1494.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">1.5초 유지</text>
+<text x="153.0" y="1509.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">같은 등급이면 원인을 뒤집지 않음</text>
+<line x1="260" y1="1491" x2="276" y2="1491" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="278" y="1452" width="214" height="78" rx="3" fill="#e9eff5" stroke="#48606f" stroke-width="1.4"/>
+<text x="385.0" y="1479.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="700" fill="#1c232e" text-anchor="middle">종합</text>
+<text x="385.0" y="1494.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">세 센서 중 가장 높은 등급과</text>
+<text x="385.0" y="1509.5" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#1c232e" text-anchor="middle">그 원인을 앱 값으로 삼는다</text>
+<line x1="492" y1="1491" x2="508" y2="1491" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="510" y="1452" width="214" height="78" rx="3" fill="#eef4f8" stroke="#2f6f8f" stroke-width="1.4"/>
+<text x="617.0" y="1473.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.0" font-weight="700" fill="#1c232e" text-anchor="middle">경보 줄</text>
+<text x="617.0" y="1487.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">H,risk,hazard,sensor,</text>
+<text x="617.0" y="1501.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">dist,width,depth</text>
+<text x="617.0" y="1515.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">— 바뀌는 순간 즉시</text>
+<line x1="724" y1="1491" x2="740" y2="1491" stroke="#8a94a3" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="742" y="1452" width="214" height="78" rx="3" fill="#eef4f8" stroke="#2f6f8f" stroke-width="1.4"/>
+<text x="849.0" y="1480.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.0" font-weight="700" fill="#1c232e" text-anchor="middle">텔레메트리</text>
+<text x="849.0" y="1494.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">T,3,… ,risk,hazard</text>
+<text x="849.0" y="1508.0" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="10.5" font-weight="400" fill="#1c232e" text-anchor="middle">— 500 ms 주기 상태</text>
+<rect x="1000" y="88" width="266" height="204" rx="4" fill="#fbfcfd" stroke="#c8d0d9" stroke-width="1.3"/>
+<text x="1014" y="111" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="12.5" font-weight="700" fill="#1c232e" text-anchor="start">설치 파라미터 (센서별)</text>
+<line x1="1014" y1="118" x2="1252" y2="118" stroke="#c8d0d9" stroke-width="1"/>
+<text x="1014" y="136" font-family="NanumGothicCoding, 'D2Coding', Consolas, monospace" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">US_MOUNT_HEIGHT_M[i]  = 0.16 m</text>
+<text x="1014" y="152" font-family="NanumGothicCoding, 'D2Coding', Consolas, monospace" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">US_TILT_DEG[i] = 65 / 45 / 65</text>
+<text x="1014" y="168" font-family="NanumGothicCoding, 'D2Coding', Consolas, monospace" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">US_BEAM_HALF_ANGLE_DEG = 7.5</text>
+<text x="1014" y="184" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start"></text>
+<text x="1014" y="200" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">좌·우 65°  빔 띠 51 mm</text>
+<text x="1014" y="216" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">           전방 주시 75 mm</text>
+<text x="1014" y="232" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">           기준거리 168 mm</text>
+<text x="1014" y="248" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">중앙 45°   빔 띠 86 mm</text>
+<text x="1014" y="264" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">           전방 주시 160 mm</text>
+<text x="1014" y="280" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">           기준거리 202 mm</text>
+<rect x="1000" y="308" width="266" height="236" rx="4" fill="#fbfcfd" stroke="#c8d0d9" stroke-width="1.3"/>
+<text x="1014" y="331" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="12.5" font-weight="700" fill="#1c232e" text-anchor="start">임계값은 어디서 오는가</text>
+<line x1="1014" y1="338" x2="1252" y2="338" stroke="#c8d0d9" stroke-width="1"/>
+<text x="1014" y="356" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">부팅 보정의 잡음 σ 배수</text>
+<text x="1014" y="372" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">  턱시작 4σ · 턱확정 8σ · 홈시작 4σ</text>
+<text x="1014" y="388" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start"></text>
+<text x="1014" y="404" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">여기에 기하 하한 두 개를 씌운다</text>
+<text x="1014" y="420" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">① 홈시작 ≥ 점프 상한 × 1.15</text>
+<text x="1014" y="436" font-family="NanumGothicCoding, 'D2Coding', Consolas, monospace" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">   h(sin(θ+α)/sin(θ−α) − 1)</text>
+<text x="1014" y="452" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">   → 뜨면 빔 띠보다 넓은 홈</text>
+<text x="1014" y="468" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">② 턱확정 ≥ 전방주시 × tan10° × 1.2</text>
+<text x="1014" y="484" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">   → 경사로를 턱으로 보지 않음</text>
+<text x="1014" y="500" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start"></text>
+<text x="1014" y="516" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">실제 값 (중앙 45°)</text>
+<text x="1014" y="532" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">  턱시작 10 · 턱확정 34 · 홈시작 56 mm</text>
+<rect x="1000" y="560" width="266" height="156" rx="4" fill="#fbfcfd" stroke="#c8d0d9" stroke-width="1.3"/>
+<text x="1014" y="583" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="12.5" font-weight="700" fill="#1c232e" text-anchor="start">상태 · 원인 코드</text>
+<line x1="1014" y1="590" x2="1252" y2="590" stroke="#c8d0d9" stroke-width="1"/>
+<text x="1014" y="608" font-family="NanumGothicCoding, 'D2Coding', Consolas, monospace" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">risk    0 SAFE · 1 CAUTION · 2 DANGER</text>
+<text x="1014" y="624" font-family="NanumGothicCoding, 'D2Coding', Consolas, monospace" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">hazard  0 NONE · 1 STEP · 2 HOLE</text>
+<text x="1014" y="640" font-family="NanumGothicCoding, 'D2Coding', Consolas, monospace" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">sensor  0 좌 · 1 중 · 2 우 · 255 없음</text>
+<text x="1014" y="656" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start"></text>
+<text x="1014" y="672" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">원본 detect.py의 RAMP / WIDE_HOLE /</text>
+<text x="1014" y="688" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">STAIR / EXIT_STEP 은 없어졌다.</text>
+<text x="1014" y="704" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">턱과 홈 둘로 합쳤다.</text>
+<rect x="1000" y="732" width="266" height="156" rx="4" fill="#fbfcfd" stroke="#c8d0d9" stroke-width="1.3"/>
+<text x="1014" y="755" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="12.5" font-weight="700" fill="#1c232e" text-anchor="start">판정 원리 요약</text>
+<line x1="1014" y1="762" x2="1252" y2="762" stroke="#c8d0d9" stroke-width="1"/>
+<text x="1014" y="780" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">· 프레임 간 차이가 아니라 부팅 때</text>
+<text x="1014" y="796" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">  실측한 평지 기준거리와 비교한다</text>
+<text x="1014" y="812" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">· 편차의 부호가 종류를 정한다</text>
+<text x="1014" y="828" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">  길면 홈 · 짧으면 턱</text>
+<text x="1014" y="844" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">· 홈은 보이면 곧 위험 (빔 띠 &gt; safe_gap)</text>
+<text x="1014" y="860" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">· 턱만 크기를 따져 경사로와 가른다</text>
+<text x="1014" y="876" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">· 속도 추정은 판정에 쓰이지 않는다</text>
+<rect x="1000" y="904" width="266" height="124" rx="4" fill="#fbfcfd" stroke="#c8d0d9" stroke-width="1.3"/>
+<text x="1014" y="927" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="12.5" font-weight="700" fill="#1c232e" text-anchor="start">색상</text>
+<line x1="1014" y1="934" x2="1252" y2="934" stroke="#c8d0d9" stroke-width="1"/>
+<text x="1014" y="952" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">초록  IDLE · 정상 종료</text>
+<text x="1014" y="968" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">빨강  DANGER 로 나가는 경로</text>
+<text x="1014" y="984" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">보라  STEP (턱 판별 중)</text>
+<text x="1014" y="1000" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">노랑  분기 조건</text>
+<text x="1014" y="1016" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11.5" font-weight="400" fill="#4d5766" text-anchor="start">회색  판정하지 않고 빠지는 길</text>
+<text x="645.0" y="1638" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#7b8697" text-anchor="middle">※ 모든 임계값은 '노면 높이 변화(m)' 기준이다. 측정 거리 편차에 sin(유효 각도)를 곱해 환산한다.</text>
+<text x="645.0" y="1655" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#7b8697" text-anchor="middle">※ 각 센서는 독립 상태(state, peak, width, depth, 표, 임계값, 기준거리)를 가진다.</text>
+<text x="645.0" y="1672" font-family="NanumGothic, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif" font-size="11" font-weight="400" fill="#7b8697" text-anchor="middle">※ 한 센서의 새 측정이 끝날 때마다 위 흐름을 한 프레임 진행한다 — 센서당 약 45 ms.</text>
+</svg>
