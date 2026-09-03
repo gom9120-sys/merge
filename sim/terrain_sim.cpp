@@ -158,13 +158,25 @@ static uint16_t measureMm(double p, double (*ground)(double), uint8_t idx) {
   return (mm < 0 || mm > 65000) ? 0 : (uint16_t)(mm + 0.5);
 }
 
+
+// 부팅 보정: 시나리오에 들어가기 전에 평지를 충분히 굴려서 기준거리와
+// 잡음을 잡게 한다. 실제로도 시동 직후 평지에서 조금 밀어야 판정이 시작된다.
+static void calibrateOnFlat(uint8_t idx, double speed) {
+  double T = (US_PING_INTERVAL_MS * US_COUNT) / 1000.0;
+  for (int k = 0; k < 80; k++) {
+    g_millis += (unsigned long)(T * 1000.0 + 0.5);
+    runTerrainDetector(idx, measureMm(0.05 + k * speed * T, h_flat, idx), g_millis);
+  }
+}
+
 void runScenario(const Scenario &sc, double speed, int *outRisk, int *outHazard) {
   setupTerrainDetectors();
   imuReady = true;
   estimatedSpeedMps = speed;
+  g_millis = 1000;
+  calibrateOnFlat(0, speed);
 
   double T = (US_PING_INTERVAL_MS * US_COUNT) / 1000.0;  // 센서당 측정 간격
-  g_millis = 1000;
   int maxRisk = RISK_SAFE, maxHazard = HAZARD_NONE;
 
   for (double p = 0.0; p < sc.lengthM; p += speed * T) {
@@ -208,10 +220,11 @@ int main(int argc, char **argv) {
     if (verbose) printf("v=%.1f under=%d over=%d | ", speeds[si], su, so);
     under += su; over += so;
   }
-  printf("COST %d UNDER %d OVER %d RUN %d PING %lu STEP_ENTER %.3f "
-         "STEP_DANGER %.3f HOLE_ENTER %.3f TILT %.0f H %.2f\n",
+  printf("COST %d UNDER %d OVER %d RUN %d PING %lu TILT %.0f H %.2f "
+         "| 보정값 잡음 %.1fmm 턱시작 %.0fmm 턱확정 %.0fmm 홈시작 %.0fmm\n",
          under * 10 + over, under, over, run, US_PING_INTERVAL_MS,
-         STEP_ENTER_M, STEP_DANGER_M, HOLE_ENTER_M,
-         US_TILT_DEG[0], US_MOUNT_HEIGHT_M[0]);
+         US_TILT_DEG[0], US_MOUNT_HEIGHT_M[0],
+         detectors[0].noiseM * 1000.0, detectors[0].stepEnterM * 1000.0,
+         detectors[0].stepDangerM * 1000.0, detectors[0].holeEnterM * 1000.0);
   return 0;
 }
