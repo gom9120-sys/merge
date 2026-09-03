@@ -208,10 +208,10 @@ int main(int argc, char **argv) {
     if (verbose) printf("v=%.1f under=%d over=%d | ", speeds[si], su, so);
     under += su; over += so;
   }
-  printf("COST %d UNDER %d OVER %d RUN %d PING %lu SUDDEN %.3f TOLR %.2f "
-         "ENTRY %.2f TILT %.0f STALE %.2f KEEPPREV %d EXITFIRST %d\n",
+  printf("COST %d UNDER %d OVER %d RUN %d PING %lu STEP_ENTER %.3f "
+         "STEP_DANGER %.3f HOLE_ENTER %.3f TILT %.0f H %.2f\n",
          under * 10 + over, under, over, run, US_PING_INTERVAL_MS,
-         SUDDEN_CHANGE_THRESHOLD_M, HOLE_TOLERANCE_RATIO, HOLE_ENTRY_WIDTH_RATIO,
-         US_TILT_DEG[0], US_STALE_INTERVAL_S, US_KEEP_PREV_ON_DROPOUT, HOLE_EXIT_CHECK_FIRST);
+         STEP_ENTER_M, STEP_DANGER_M, HOLE_ENTER_M,
+         US_TILT_DEG[0], US_MOUNT_HEIGHT_M[0]);
   return 0;
 }
