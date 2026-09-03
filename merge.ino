@@ -153,6 +153,9 @@
 //   E,US_CAL,<센서>,<기준거리>,<잡음>,<턱시작>,<턱확정>,<홈시작>  단위 mm
 //                          부팅 보정이 끝나면 센서별로 1줄씩 (총 3줄)
 //
+// US_RAW_DEBUG를 1로 두면 진단용 줄이 추가로 나간다 (기본 0).
+//   R,<센서>,<원시mm>,<중앙값mm>,<편차mm>   매 측정마다
+//
 // HUMAN_READABLE_LOG를 1로 바꾸면 '#'로 시작하는 사람이 읽는 줄이 하나 더
 // 나간다(기본 0, 현장 확인용). 아래 파서는 어차피 무시한다.
 //
@@ -225,6 +228,16 @@
 //   # 12.345s DANGER HOLE  C dist=250mm width=45mm depth=150mm
 //   # 13.900s SAFE   CLEAR
 #define HUMAN_READABLE_LOG 0
+
+// 진단용. 1로 두면 US_RAW_DEBUG_SENSOR 번 센서의 측정을 매 프레임 그대로
+// 내보낸다. 가만히 서 있는데 경보가 뜨거나, 거리값이 튀는 것 같을 때 쓴다.
+//     R,<센서>,<원시mm>,<중앙값mm>,<편차mm>
+// 편차는 평지 기준거리 대비 노면 높이 변화다(+ 홈 / - 턱). 서 있으면 이 값이
+// 0 근처에 머물러야 한다. 두 값 사이를 규칙적으로 오가면 센서 간 크로스토크,
+// 불규칙하게 튀면 반향이 약한 것이다.
+// 9600 baud에서 한 센서분(약 20바이트 / 45ms)이 한계라 한 번에 하나만 본다.
+#define US_RAW_DEBUG 0
+#define US_RAW_DEBUG_SENSOR 1
 
 // 노면 위험 판정은 모터에 개입하지 않는다. 위험도/위험원인은 앱으로만 간다.
 // 1 = IMU 가속도 적분으로 속도를 추정. 0 = SPEED_FIXED_MPS 고정값 사용.
@@ -1195,6 +1208,9 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
   }
   if (interval < US_MIN_INTERVAL_S) interval = US_MIN_INTERVAL_S;
 
+  uint16_t rawMm = distanceMm;   // 진단용으로 필터 전 값을 남겨 둔다
+  (void)rawMm;
+
 #if US_MEDIAN_FILTER
   // 유효 측정만 밀어 넣고, 3개가 모이면 중앙값을 판정에 쓴다.
   if (distanceMm != 0) {
@@ -1209,6 +1225,21 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
 #endif
 
   float dev = terrainDeviationM(index, distanceMm);
+
+#if US_RAW_DEBUG
+  if (index == US_RAW_DEBUG_SENSOR) {
+    Serial.print(F("R,"));
+    Serial.print(index);
+    Serial.print(',');
+    Serial.print(rawMm);
+    Serial.print(',');
+    Serial.print(distanceMm);
+    Serial.print(',');
+    if (isnan(dev)) Serial.println(F("NA"));
+    else Serial.println((int)(dev * 1000.0));
+  }
+#endif
+
   if (isnan(dev)) {
     // 측정 실패. 이번 프레임은 판정하지 않는다.
 #if US_KEEP_PREV_ON_DROPOUT
