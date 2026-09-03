@@ -158,60 +158,159 @@ static uint16_t measureMm(double p, double (*ground)(double), uint8_t idx) {
   return (mm < 0 || mm > 65000) ? 0 : (uint16_t)(mm + 0.5);
 }
 
-void runScenario(const Scenario &sc, double speed, int *outRisk, int *outHazard) {
-  setupTerrainDetectors();
-  imuReady = true;
-  estimatedSpeedMps = speed;
 
-  double T = (US_PING_INTERVAL_MS * US_COUNT) / 1000.0;  // 센서당 측정 간격
-  g_millis = 1000;
-  int maxRisk = RISK_SAFE, maxHazard = HAZARD_NONE;
+// ============================================================
+// 후보 알고리즘: 절대 임계값으로 종류를 가르고 상태별 하위 판정
+// ============================================================
+// 초음파는 빔 원뿔 안의 최단 거리를 돌려준다. 그래서 평지에서는 빔의 가장
+// 아래쪽 광선(내려다보는 각 = 설치각 + 반각)이 만드는 값 하나로 고정된다.
+//     d0 = h / sin(설치각 + 반각)
+// 이 값보다 길면 노면이 내려간 것(홈), 짧으면 올라온 것(턱)이다. 이전
+// 프레임과의 차이(delta)를 볼 필요가 없다.
+//
+// 편차를 수직 높이로 환산하는 계수 k = sin(설치각 + 반각).
+//     노면 높이 변화 = (d - d0) * k     (+ 홈, - 턱)
+//
+// 종류가 갈린 뒤 상태별 하위 판정으로 들어간다.
+//   홈 상태 : 원본 흐름도대로 너비를 속도로 적분해 safe_gap과 비교
+//   턱 상태 : 편차의 최대값(peak)을 추적한다. 경사로 진입도 전방을 보는
+//             센서에는 턱처럼 잠깐 보이는데, 그 편차는
+//                 전방주시거리 * tan(경사각)
+//             밖에 안 되므로(70도/16cm에서 10도 경사면 10mm) 실제 턱의
+//             수십 mm와 크기로 갈린다. 노면이 복귀했을 때 peak가
+//             STEP_DANGER 미만이면 경사로/잔요철로 보고 SAFE.
+enum CandState : uint8_t { CS_IDLE, CS_HOLE, CS_STEP };
 
-  for (double p = 0.0; p < sc.lengthM; p += speed * T) {
-    g_millis += (unsigned long)(T * 1000.0 + 0.5);
-    uint16_t mm = measureMm(p, sc.h, 0);
-    detectors[0].risk = RISK_SAFE;
-    detectors[0].hazard = HAZARD_NONE;
-    runTerrainDetector(0, mm, g_millis);
-    if (detectors[0].risk > maxRisk) {
-      maxRisk = detectors[0].risk;
-      maxHazard = detectors[0].hazard;
-    }
-  }
-  *outRisk = maxRisk;
-  *outHazard = maxHazard;
+double CAND_ENTER_M      = 0.020;  // 턱 진입 임계 (노면이 올라옴)
+double CAND_HOLE_ENTER_M = 0.040;  // 홈 진입 임계 (노면이 내려감)
+                                   // 얕은 굴곡을 홈으로 보지 않으려면 턱보다 높게
+double CAND_STEP_DANGER_M= 0.040;  // 턱 높이가 이 이상이면 DANGER
+double CAND_EXIT_M       = 0.010;  // 이 아래로 돌아오면 노면 복귀
+double CAND_HOLE_DANGER_RATIO = 1.0;   // safe_gap 대비 위험 너비
+double CAND_HOLE_CAUTION_RATIO = 0.5;
+
+struct Cand {
+  CandState state;
+  double d0, k;
+  double holeWidth, holeDepth, stepPeak;
+  uint16_t recent[3]; uint8_t n;
+  int risk, hazard;
+};
+
+static void candInit(Cand &c, uint8_t idx) {
+  double tilt = US_TILT_DEG[idx], a = BEAM_HALF_ANGLE_DEG;
+  c.state = CS_IDLE;
+  // 실제 펌웨어에서는 부팅 때 평지에서 몇 프레임 재서 잡는 편이 낫다.
+  c.d0 = US_MOUNT_HEIGHT_M[idx] / sin((tilt + a) * M_PI / 180.0);
+  c.k = sin((tilt + a) * M_PI / 180.0);
+  c.holeWidth = c.holeDepth = c.stepPeak = 0;
+  c.n = 0; c.risk = RISK_SAFE; c.hazard = HAZARD_NONE;
 }
 
-int main(int argc, char **argv) {
-  int verbose = (argc > 1 && strcmp(argv[1], "-v") == 0);
-  double speeds[] = { 0.2, 0.3, 0.4, 0.5, 0.6 };
-  int nSpeeds = sizeof(speeds) / sizeof(speeds[0]);
-  const int TRIALS = 25;
+static void candStep(Cand &c, uint16_t mm, double speed, double interval, uint8_t idx) {
+  c.risk = RISK_SAFE; c.hazard = HAZARD_NONE;
+  if (mm == 0) { c.n = 0; return; }
 
-  int under = 0, over = 0, run = 0;
-  for (int si = 0; si < nSpeeds; si++) {
-    int su = 0, so = 0;
-    for (int i = 0; i < SCENARIO_COUNT; i++) {
-      int u = 0, o = 0;
-      for (int t = 0; t < TRIALS; t++) {
-        rngState = 12345 + t * 7919 + i * 104729;
-        int risk, hazard;
-        runScenario(SCENARIOS[i], speeds[si], &risk, &hazard);
-        if (risk < SCENARIOS[i].minRisk) u++;
-        else if (risk > SCENARIOS[i].maxRisk) o++;
-      }
-      if (verbose)
-        printf("  v=%.1f %-11s under=%2d over=%2d /%d\n",
-               speeds[si], SCENARIOS[i].name, u, o, TRIALS);
-      su += u; so += o; run += TRIALS;
-    }
-    if (verbose) printf("v=%.1f under=%d over=%d | ", speeds[si], su, so);
-    under += su; over += so;
+  // 현재 코드와 같은 3점 중앙값 (헛에코 제거)
+  c.recent[2] = c.recent[1]; c.recent[1] = c.recent[0]; c.recent[0] = mm;
+  if (c.n < 3) c.n++;
+  uint16_t v = mm;
+  if (c.n >= 3) {
+    uint16_t a = c.recent[0], b = c.recent[1], d = c.recent[2], t;
+    if (a > b) { t = a; a = b; b = t; }
+    if (b > d) { t = b; b = d; d = t; }
+    if (a > b) { t = a; a = b; b = t; }
+    v = b;
   }
-  printf("COST %d UNDER %d OVER %d RUN %d PING %lu SUDDEN %.3f TOLR %.2f "
-         "ENTRY %.2f TILT %.0f STALE %.2f KEEPPREV %d EXITFIRST %d\n",
-         under * 10 + over, under, over, run, US_PING_INTERVAL_MS,
-         SUDDEN_CHANGE_THRESHOLD_M, HOLE_TOLERANCE_RATIO, HOLE_ENTRY_WIDTH_RATIO,
-         US_TILT_DEG[0], US_STALE_INTERVAL_S, US_KEEP_PREV_ON_DROPOUT, HOLE_EXIT_CHECK_FIRST);
+
+  double dev = (v / 1000.0 - c.d0) * c.k;   // + 홈 / - 턱
+
+  switch (c.state) {
+    case CS_IDLE:
+      if (dev > CAND_HOLE_ENTER_M) {
+        c.state = CS_HOLE;
+        c.holeDepth = dev;
+        c.holeWidth = usBeamFootprintM[idx];   // 빔 띠가 다 들어가야 보인다
+      } else if (-dev > CAND_ENTER_M) {
+        c.state = CS_STEP;
+        c.stepPeak = -dev;
+      }
+      break;
+
+    case CS_HOLE:
+      c.holeWidth += speed * interval;
+      if (dev > c.holeDepth) c.holeDepth = dev;
+      if (dev < CAND_EXIT_M) {                 // 노면 복귀 -> 지나온 너비로 판정
+        if (c.holeWidth >= HOLE_SAFE_GAP_M * CAND_HOLE_DANGER_RATIO) {
+          c.risk = RISK_DANGER; c.hazard = HAZARD_HOLE;
+        } else if (c.holeWidth >= HOLE_SAFE_GAP_M * CAND_HOLE_CAUTION_RATIO) {
+          c.risk = RISK_CAUTION; c.hazard = HAZARD_HOLE;
+        }
+        c.state = CS_IDLE; c.holeWidth = c.holeDepth = 0;
+      } else if (c.holeWidth >= HOLE_SAFE_GAP_M * CAND_HOLE_DANGER_RATIO) {
+        c.risk = RISK_DANGER; c.hazard = HAZARD_HOLE;   // 지나는 중에 이미 확정
+        c.state = CS_IDLE; c.holeWidth = c.holeDepth = 0;
+      } else if (c.holeWidth >= HOLE_SAFE_GAP_M * CAND_HOLE_CAUTION_RATIO) {
+        c.risk = RISK_CAUTION; c.hazard = HAZARD_HOLE;
+      }
+      break;
+
+    case CS_STEP:
+      if (-dev > c.stepPeak) c.stepPeak = -dev;
+      if (c.stepPeak >= CAND_STEP_DANGER_M) {  // 턱 확정. 즉시 알린다
+        c.risk = RISK_DANGER; c.hazard = HAZARD_STEP;
+        c.state = CS_IDLE; c.stepPeak = 0;
+      } else if (-dev < CAND_EXIT_M) {
+        // 노면이 돌아왔고 peak가 작았다 = 경사로 진입이나 잔요철
+        c.state = CS_IDLE; c.stepPeak = 0;
+      }
+      break;
+  }
+}
+
+
+// 위험이 바퀴에 닿기 "전에" 얼마나 미리 잡히는지를 잰다.
+// p = 바퀴 접지 위치. 모든 위험 지형은 x = 0.5 m에서 시작하므로
+//   경보 여유 = 0.5 - (DANGER가 처음 뜬 p)
+// 양수면 바퀴가 닿기 전에 예측한 것, 음수면 이미 지난 뒤 알린 것이다.
+static bool runWarn(const Scenario &sc, double speed, double *warnM) {
+  setupTerrainDetectors();   // 빔 띠/전방주시 계산
+  Cand c; candInit(c, 0);
+  double T = (US_PING_INTERVAL_MS * US_COUNT) / 1000.0;
+  for (double p = 0.0; p < sc.lengthM; p += speed * T) {
+    candStep(c, measureMm(p, sc.h, 0), speed, T, 0);
+    if (c.risk == RISK_DANGER) { *warnM = 0.5 - p; return true; }
+  }
+  return false;
+}
+
+int main() {
+  const char *names[] = { "curb_6cm", "curb_10cm", "dropoff", "hole_8cm" };
+  double (*hs[])(double) = { h_curb_6cm, h_curb_up, h_dropoff, h_hole_wide };
+  double speeds[] = { 0.3, 0.4, 0.5 };
+  const int TRIALS = 40;
+
+  setupTerrainDetectors();
+  printf("높이 %.2fm / %.0f도 | 빔띠 %.0fmm 전방주시 %.0fmm\n",
+         US_MOUNT_HEIGHT_M[0], US_TILT_DEG[0],
+         usBeamFootprintM[0] * 1000.0, usLookAheadM[0] * 1000.0);
+  double allSum = 0; int allN = 0, allDet = 0, allRun = 0, allLate = 0;
+  for (int i = 0; i < 4; i++) {
+    Scenario sc = { names[i], hs[i], 2.0, RISK_DANGER, RISK_DANGER, 0 };
+    double sum = 0, worst = 1e9; int det = 0, run = 0, late = 0;
+    for (int si = 0; si < 3; si++) for (int t = 0; t < TRIALS; t++) {
+      rngState = 12345 + t * 7919 + i * 104729 + si * 31;
+      double w; run++;
+      if (runWarn(sc, speeds[si], &w)) {
+        det++; sum += w; if (w < worst) worst = w; if (w < 0) late++;
+      }
+    }
+    printf("  %-10s 검출 %3d/%3d  평균 여유 %+6.1fmm  최악 %+6.1fmm  늦은 경보 %d\n",
+           names[i], det, run, det ? sum / det * 1000.0 : 0.0,
+           det ? worst * 1000.0 : 0.0, late);
+    allSum += sum; allN += det; allDet += det; allRun += run; allLate += late;
+  }
+  printf("  >> 합계 검출 %d/%d  평균 여유 %+.1fmm  (0.4m/s에서 %+.0fms)  늦은 경보 %d\n\n",
+         allDet, allRun, allSum / allN * 1000.0, allSum / allN / 0.4 * 1000.0, allLate);
   return 0;
 }

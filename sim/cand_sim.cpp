@@ -118,6 +118,10 @@ static double slantRangeM(double p, double (*ground)(double), uint8_t idx) {
 
   // 차체 기울기는 바퀴가 받치는 면의 기울기다 (양수 = 오르막)
   double slope = atan2(support(p + 0.03, ground) - support(p - 0.03, ground), 0.06);
+  // 실제 유모차는 급한 턱에서 45도씩 기울지 않는다. 프레임이 버티는 범위로 제한.
+  const double MAX_PITCH = 15.0 * M_PI / 180.0;
+  if (slope > MAX_PITCH) slope = MAX_PITCH;
+  if (slope < -MAX_PITCH) slope = -MAX_PITCH;
 
   // 센서 원점: 받침면에서 수직으로 h 만큼
   double ox = p - h * sin(slope);
