@@ -293,7 +293,7 @@ const unsigned long BELT_DEBOUNCE_MS = 50;
 
 // ===================== 초음파 측정값 =====================
 const unsigned long US_PING_INTERVAL_MS = 15;    // 센서 간 간격 -> 센서당 45ms
-const unsigned long US_RISE_TIMEOUT_US = 3000;   // 에코 상승 대기 한계
+const unsigned long US_RISE_TIMEOUT_US = 1500;   // 에코 상승 대기 한계
 const unsigned long US_MAX_ECHO_US = 6000;       // 약 1 m 왕복
 const uint16_t US_MIN_VALID_MM = 20;             // HC-SR04 최소 측정 거리
 const uint16_t US_MAX_VALID_MM = 1000;           // 노면용으로 좁힌 상한
@@ -399,6 +399,7 @@ const float HOLE_SAFE_GAP_M = HOLE_SAFE_GAP_RATIO * WHEEL_WIDTH_M;
 const uint8_t US_BASELINE_SAMPLES = 20;
 const float US_BASELINE_MIN_RATIO = 0.7;
 const float US_BASELINE_MAX_RATIO = 1.4;
+const float US_BASELINE_MAX_NOISE_M = 0.015;  // 이보다 흔들리면 경고한다
 
 // 측정 주기
 //   센서 하나가 다시 측정될 때까지의 시간은 US_PING_INTERVAL_MS * US_COUNT,
@@ -505,8 +506,7 @@ enum MotorOutput : uint8_t {
 
 enum UsPhase : uint8_t {
   US_IDLE,
-  US_WAIT_RISE,
-  US_WAIT_FALL
+  US_MEASURING  // 한 번의 updateUltrasonic 안에서만 유지된다
 };
 
 // detect.py의 Risk / Hazard IntEnum과 값이 같다.
@@ -603,8 +603,6 @@ uint8_t telemetrySeq = 0;
 UsPhase usPhase = US_IDLE;
 uint8_t usIndex = 0;
 unsigned long usPingStartedAtMs = 0;
-unsigned long usTrigAtUs = 0;
-unsigned long usEchoStartUs = 0;
 uint16_t usDistanceMm[US_COUNT] = { 0, 0, 0 };
 
 // 설치 각도/높이에서 미리 계산해 두는 값.
@@ -1035,49 +1033,60 @@ void updateInputs(unsigned long now) {
 // 한 번에 한 센서만 쏘고, 에코를 폴링으로 기다린다. pulseIn을 쓰면 센서당
 // 최대 30ms를 블로킹해서 3개면 90ms - 20ms 제어 주기가 무너진다.
 void updateUltrasonic(unsigned long now) {
-  switch (usPhase) {
-    case US_IDLE:
-      if (now - usPingStartedAtMs < US_PING_INTERVAL_MS) return;
-      usPingStartedAtMs = now;
-      digitalWrite(US_TRIG_PINS[usIndex], LOW);
-      delayMicroseconds(2);
-      digitalWrite(US_TRIG_PINS[usIndex], HIGH);
-      delayMicroseconds(10);
-      digitalWrite(US_TRIG_PINS[usIndex], LOW);
-      usTrigAtUs = micros();
-      usPhase = US_WAIT_RISE;
-      break;
+  if (usPhase != US_IDLE) return;
+  if (now - usPingStartedAtMs < US_PING_INTERVAL_MS) return;
+  usPingStartedAtMs = now;
 
-    case US_WAIT_RISE:
-      if (digitalRead(US_ECHO_PINS[usIndex]) == HIGH) {
-        usEchoStartUs = micros();
-        usPhase = US_WAIT_FALL;
-      } else if (micros() - usTrigAtUs > US_RISE_TIMEOUT_US) {
-        usDistanceMm[usIndex] = 0;  // 센서 응답 없음
-        finishPing();
-      }
-      break;
+  uint8_t trigPin = US_TRIG_PINS[usIndex];
+  uint8_t echoPin = US_ECHO_PINS[usIndex];
 
-    case US_WAIT_FALL:
-      if (digitalRead(US_ECHO_PINS[usIndex]) == LOW) {
-        usDistanceMm[usIndex] = pulseToMm(micros() - usEchoStartUs);
-        finishPing();
-      } else if (micros() - usEchoStartUs > US_MAX_ECHO_US) {
-        usDistanceMm[usIndex] = 0;  // 측정 범위 밖
-        finishPing();
-      }
-      break;
+  usPhase = US_MEASURING;
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  // 에코는 여기서 끝까지 잰다. 예전에는 상승/하강 대기를 loop() 여러 바퀴에
+  // 나눠 폴링했는데, 그 사이에 다른 일(특히 20ms마다 도는 IMU I2C 읽기,
+  // 약 1.3ms)이 끼면 하강 엣지를 늦게 보고 그 지연이 그대로 거리 오차가 됐다.
+  // 45도 센서의 실제 에코가 1.18ms라 지연과 크기가 같아서, 측정값이 두 갈래로
+  // 갈리고 보정이 그 가운데를 기준거리로 잡아 서 있어도 턱/홈이 번갈아 떴다.
+  // 측정 간격을 늘려도 소용이 없었던 이유는 IMU 주기의 배수라 충돌 위상이
+  // 고정됐기 때문이다.
+  //
+  // 막는 시간은 보통 1.3ms, 최악이라도 상승 대기 + 에코 한계다. 제어 주기가
+  // 20ms이고 핑은 그보다 드물게 나가므로 문제되지 않는다.
+  unsigned long trigAt = micros();
+  while (digitalRead(echoPin) == LOW) {
+    if (micros() - trigAt > US_RISE_TIMEOUT_US) {
+      usDistanceMm[usIndex] = 0;  // 센서 응답 없음
+      finishPing();
+      return;
+    }
   }
+
+  unsigned long echoStart = micros();
+  while (digitalRead(echoPin) == HIGH) {
+    if (micros() - echoStart > US_MAX_ECHO_US) {
+      usDistanceMm[usIndex] = 0;  // 측정 범위 밖
+      finishPing();
+      return;
+    }
+  }
+
+  usDistanceMm[usIndex] = pulseToMm(micros() - echoStart);
+  finishPing();
 }
 
 void finishPing() {
+  usPhase = US_IDLE;
   // 이 센서의 한 프레임이 완성됐으니 그 자리에서 노면 위험 판정을 돌린다.
   // 파이썬의 for prev, curr in zip(...) 한 바퀴에 해당한다.
   runTerrainDetector(usIndex, usDistanceMm[usIndex], millis());
 
   usIndex++;
   if (usIndex >= US_COUNT) usIndex = 0;
-  usPhase = US_IDLE;
 }
 
 uint16_t pulseToMm(unsigned long pulseUs) {
@@ -1298,6 +1307,15 @@ void runTerrainDetector(uint8_t index, uint16_t distanceMm, unsigned long now) {
 
       d.exitM = d.noiseM * TERRAIN_EXIT_SIGMA;
       if (d.exitM > d.stepEnterM * 0.5) d.exitM = d.stepEnterM * 0.5;
+
+      // 보정 구간이 이미 심하게 흔들렸다면 기준거리도 임계값도 믿을 게 못
+      // 된다. 측정을 먼저 봐야 하므로 알려 준다.
+      if (d.noiseM > US_BASELINE_MAX_NOISE_M) {
+        Serial.print(F("E,US_NOISY,"));
+        Serial.print(index);
+        Serial.print(',');
+        Serial.println((int)(d.noiseM * 1000.0));
+      }
     }
     return;  // 보정이 끝날 때까지는 판정하지 않는다
   }
